@@ -5,7 +5,7 @@ from datetime import date
 
 import httpx
 
-from config import OLLAMA_BASE_URL, OLLAMA_MODEL
+from config import OLLAMA_API_KEY, OLLAMA_BASE_URL, OLLAMA_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +57,14 @@ async def extract_intent(text: str) -> dict:
 
     for attempt in range(3):
         try:
+            headers = {}
+            if OLLAMA_API_KEY:
+                headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     f"{OLLAMA_BASE_URL}/api/chat",
                     json=payload,
+                    headers=headers,
                 )
                 response.raise_for_status()
                 raw = response.json()["message"]["content"]
