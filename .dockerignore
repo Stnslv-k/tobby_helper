@@ -1,0 +1,9 @@
+.env
+.planning/
+__pycache__/
+*.pyc
+*.pyo
+.git/
+credentials/
+*.json
+!requirements.txt
