@@ -7,7 +7,7 @@ services:
     container_name: voice_bot
     env_file: .env
     environment:
-      OLLAMA_BASE_URL: http://172.17.0.1:11434
+      OLLAMA_BASE_URL: http://172.20.0.1:11434
       OLLAMA_API_KEY: ollama-local
 ports:
       # OAuth callback port — должен быть доступен снаружи для Google redirect
