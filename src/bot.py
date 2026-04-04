@@ -15,7 +15,7 @@ from telegram.ext import (
 
 from config import TELEGRAM_BOT_TOKEN
 from whisper_service import transcribe
-from ollama_service import extract_intent
+from ollama_service import extract_intent, chat_reply
 from router import route_action
 from user_config import (
     is_calendar_configured,
@@ -278,7 +278,10 @@ async def process_input(update: Update, text: str) -> None:
     await update.message.reply_text("Обрабатываю запрос...")
     try:
         intent = await extract_intent(text)
-        response = await route_action(intent)
+        if intent.get("action") == "unknown":
+            response = await chat_reply(text)
+        else:
+            response = await route_action(intent)
         await update.message.reply_text(response)
     except Exception as e:
         logger.error("Error processing input: %s", e)

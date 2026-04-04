@@ -44,6 +44,28 @@ def _extract_json(raw: str) -> dict:
     return json.loads(match.group())
 
 
+async def chat_reply(text: str) -> str:
+    payload = {
+        "model": OLLAMA_MODEL,
+        "messages": [
+            {"role": "system", "content": "Ты дружелюбный помощник. Отвечай по-русски, кратко и по делу."},
+            {"role": "user", "content": text},
+        ],
+        "stream": False,
+    }
+    headers = {}
+    if OLLAMA_API_KEY:
+        headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(
+            f"{OLLAMA_BASE_URL}/api/chat",
+            json=payload,
+            headers=headers,
+        )
+        response.raise_for_status()
+        return response.json()["message"]["content"]
+
+
 async def extract_intent(text: str) -> dict:
     payload = {
         "model": OLLAMA_MODEL,
