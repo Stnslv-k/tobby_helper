@@ -9,7 +9,7 @@ services:
     environment:
       OLLAMA_BASE_URL: http://172.20.0.1:11434
       OLLAMA_API_KEY: ollama-local
-ports:
+    ports:
       # OAuth callback port — должен быть доступен снаружи для Google redirect
       - "${OAUTH_PORT:-8080}:8080"
     volumes:
