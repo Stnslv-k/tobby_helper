@@ -16,6 +16,7 @@ from telegram.ext import (
 from config import TELEGRAM_BOT_TOKEN
 from whisper_service import transcribe
 from ollama_service import extract_intent, chat_reply
+from date_parser import extract_date_from_text
 from router import route_action
 from user_config import (
     is_calendar_configured,
@@ -281,6 +282,8 @@ async def process_input(update: Update, text: str) -> None:
         if intent.get("action") == "unknown":
             response = await chat_reply(text)
         else:
+            if not intent.get("date"):
+                intent["date"] = extract_date_from_text(text)
             response = await route_action(intent)
         await update.message.reply_text(response)
     except Exception as e:
