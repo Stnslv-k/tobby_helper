@@ -5,7 +5,8 @@ services:
       args:
         WHISPER_MODEL: ${WHISPER_MODEL:-small}
     container_name: voice_bot
-    env_file: .env
+    env_file:
+      - .env
     environment:
       OLLAMA_BASE_URL: http://172.20.0.1:11434
       OLLAMA_API_KEY: ollama-local
