@@ -24,12 +24,23 @@ def _db_id() -> str:
     return db_id
 
 
-def _get_title_property(client: Client, db_id: str) -> str:
+def _get_db_properties(client: Client, db_id: str) -> dict:
     db = client.databases.retrieve(database_id=db_id)
-    for name, prop in db["properties"].items():
+    return db["properties"]
+
+
+def _get_title_property(client: Client, db_id: str) -> str:
+    for name, prop in _get_db_properties(client, db_id).items():
         if prop["type"] == "title":
             return name
     raise RuntimeError("В базе данных Notion не найдено поле-заголовок.")
+
+
+def _get_date_property(client: Client, db_id: str) -> str | None:
+    for name, prop in _get_db_properties(client, db_id).items():
+        if prop["type"] == "date":
+            return name
+    return None
 
 
 def _extract_title(page: dict) -> str:
@@ -60,7 +71,9 @@ def create_page(title: str, description: str | None = None, date_str: str | None
     }
 
     if date_str:
-        properties["Date"] = {"date": {"start": date_str}}
+        date_prop = _get_date_property(client, db_id)
+        if date_prop:
+            properties[date_prop] = {"date": {"start": date_str}}
 
     children = []
     if description:
@@ -95,16 +108,19 @@ def find_page_by_title(title: str) -> str | None:
 
 def update_page(page_url: str, date_str: str | None = None, title: str | None = None) -> str:
     client = _get_client()
+    db_id = _db_id()
     page_id = _page_id_from_url(page_url)
 
     properties: dict = {}
 
     if title:
-        title_prop = _get_title_property(client, _db_id())
+        title_prop = _get_title_property(client, db_id)
         properties[title_prop] = {"title": [{"text": {"content": title}}]}
 
     if date_str:
-        properties["Date"] = {"date": {"start": date_str}}
+        date_prop = _get_date_property(client, db_id)
+        if date_prop:
+            properties[date_prop] = {"date": {"start": date_str}}
 
     if not properties:
         raise ValueError("Нечего обновлять.")
