@@ -3,7 +3,7 @@ import logging
 from datetime import date
 
 from calendar_service import create_event, list_events
-from notion_service import create_page, list_pages
+from notion_service import create_page, list_pages, update_page
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +62,19 @@ async def route_action(intent: dict) -> str:
         except Exception as e:
             logger.error("Notion error: %s", e)
             return f"Не удалось добавить запись в Notion: {e}"
+
+    elif action == "update_notion":
+        url = intent.get("url")
+        if not url:
+            return "Укажи ссылку на страницу Notion которую нужно обновить."
+        try:
+            await loop.run_in_executor(
+                None, update_page, url, intent.get("date"), intent.get("title")
+            )
+            return f"Запись обновлена в Notion:\n🔗 {url}"
+        except Exception as e:
+            logger.error("Notion update error: %s", e)
+            return f"Не удалось обновить запись в Notion: {e}"
 
     elif action == "read_calendar":
         try:

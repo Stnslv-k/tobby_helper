@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import date
 
 from notion_client import Client
@@ -29,6 +30,22 @@ def _get_title_property(client: Client, db_id: str) -> str:
         if prop["type"] == "title":
             return name
     raise RuntimeError("В базе данных Notion не найдено поле-заголовок.")
+
+
+def _extract_title(page: dict) -> str:
+    for prop in page.get("properties", {}).values():
+        if prop.get("type") == "title":
+            title_list = prop.get("title", [])
+            return title_list[0]["plain_text"] if title_list else "Без названия"
+    return "Без названия"
+
+
+def _page_id_from_url(url: str) -> str:
+    match = re.search(r"([a-f0-9]{32})(?:[?#]|$)", url.replace("-", ""))
+    if match:
+        raw = match.group(1)
+        return f"{raw[:8]}-{raw[8:12]}-{raw[12:16]}-{raw[16:20]}-{raw[20:]}"
+    raise ValueError(f"Не удалось извлечь ID страницы из URL: {url}")
 
 
 def create_page(title: str, description: str | None = None, date_str: str | None = None) -> str:
@@ -66,6 +83,27 @@ def create_page(title: str, description: str | None = None, date_str: str | None
     return page_url
 
 
+def update_page(page_url: str, date_str: str | None = None, title: str | None = None) -> str:
+    client = _get_client()
+    page_id = _page_id_from_url(page_url)
+
+    properties: dict = {}
+
+    if title:
+        title_prop = _get_title_property(client, _db_id())
+        properties[title_prop] = {"title": [{"text": {"content": title}}]}
+
+    if date_str:
+        properties["Date"] = {"date": {"start": date_str}}
+
+    if not properties:
+        raise ValueError("Нечего обновлять.")
+
+    client.pages.update(page_id=page_id, properties=properties)
+    logger.info("Updated Notion page: %s", page_id)
+    return page_url
+
+
 def list_pages(limit: int = 5) -> list[dict]:
     client = _get_client()
 
@@ -77,9 +115,7 @@ def list_pages(limit: int = 5) -> list[dict]:
 
     pages = []
     for page in response.get("results", []):
-        title_prop = page.get("properties", {}).get("Name", {})
-        title_list = title_prop.get("title", [])
-        title = title_list[0]["plain_text"] if title_list else "Без названия"
+        title = _extract_title(page)
         pages.append({"title": title, "url": page.get("url", ""), "id": page.get("id", "")})
 
     return pages
