@@ -22,6 +22,7 @@ def _format_event(event: dict) -> str:
 
 
 async def route_action(intent: dict) -> str:
+    logger.info("Routing intent: %s", intent)
     action = intent.get("action", "unknown")
     title = intent.get("title") or "Без названия"
     event_date = intent.get("date") or date.today().isoformat()
