@@ -169,9 +169,9 @@ async def setup_notion_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def notion_receive_token(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     token = update.message.text.strip()
-    if not token.startswith("secret_"):
+    if not token.startswith(("secret_", "ntn_")):
         await update.message.reply_text(
-            "Токен должен начинаться с `secret_`. Попробуй ещё раз:",
+            "Токен должен начинаться с `secret_` или `ntn_`. Попробуй ещё раз:",
             parse_mode="Markdown",
         )
         return NOTION_STEP_TOKEN
