@@ -83,6 +83,16 @@ def create_page(title: str, description: str | None = None, date_str: str | None
     return page_url
 
 
+def find_page_by_title(title: str) -> str | None:
+    client = _get_client()
+    response = client.databases.query(database_id=_db_id())
+    for page in response.get("results", []):
+        page_title = _extract_title(page)
+        if page_title.lower() == title.lower():
+            return page.get("url", "")
+    return None
+
+
 def update_page(page_url: str, date_str: str | None = None, title: str | None = None) -> str:
     client = _get_client()
     page_id = _page_id_from_url(page_url)

@@ -1,9 +1,10 @@
 import asyncio
 import logging
+import re
 from datetime import date
 
 from calendar_service import create_event, list_events
-from notion_service import create_page, list_pages, update_page
+from notion_service import create_page, find_page_by_title, list_pages, update_page
 
 logger = logging.getLogger(__name__)
 
@@ -65,11 +66,17 @@ async def route_action(intent: dict) -> str:
 
     elif action == "update_notion":
         url = intent.get("url")
+        # Если URL не содержит 32-символьный ID — ищем по названию
+        if url and not re.search(r"[a-f0-9]{32}", url.replace("-", "")):
+            url = None
+        if not url and title and title != "Без названия":
+            url = await loop.run_in_executor(None, find_page_by_title, title)
         if not url:
-            return "Укажи ссылку на страницу Notion которую нужно обновить."
+            return "Не нашёл такую запись в Notion. Уточни название или дай ссылку."
         try:
+            new_title = intent.get("title") if intent.get("url") else None
             await loop.run_in_executor(
-                None, update_page, url, intent.get("date"), intent.get("title")
+                None, update_page, url, intent.get("date"), new_title
             )
             return f"Запись обновлена в Notion:\n🔗 {url}"
         except Exception as e:
