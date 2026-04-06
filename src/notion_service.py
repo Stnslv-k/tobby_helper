@@ -23,11 +23,21 @@ def _db_id() -> str:
     return db_id
 
 
+def _get_title_property(client: Client, db_id: str) -> str:
+    db = client.databases.retrieve(database_id=db_id)
+    for name, prop in db["properties"].items():
+        if prop["type"] == "title":
+            return name
+    raise RuntimeError("В базе данных Notion не найдено поле-заголовок.")
+
+
 def create_page(title: str, description: str | None = None, date_str: str | None = None) -> str:
     client = _get_client()
+    db_id = _db_id()
+    title_prop = _get_title_property(client, db_id)
 
     properties: dict = {
-        "Name": {
+        title_prop: {
             "title": [{"text": {"content": title}}]
         }
     }
@@ -46,7 +56,7 @@ def create_page(title: str, description: str | None = None, date_str: str | None
         })
 
     page = client.pages.create(
-        parent={"database_id": _db_id()},
+        parent={"database_id": db_id},
         properties=properties,
         children=children,
     )
