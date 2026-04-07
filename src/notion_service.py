@@ -26,7 +26,9 @@ def _db_id() -> str:
 
 def _get_db_properties(client: Client, db_id: str) -> dict:
     db = client.databases.retrieve(database_id=db_id)
-    return db["properties"]
+    props = db["properties"]
+    logger.info("DB properties: %s", {k: v["type"] for k, v in props.items()})
+    return props
 
 
 def _get_title_property(client: Client, db_id: str) -> str:
