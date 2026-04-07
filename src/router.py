@@ -4,7 +4,7 @@ import re
 from datetime import date
 
 from calendar_service import create_event, list_events
-from notion_service import create_page, find_page_by_title, list_pages, update_page
+from notion_service import create_page, find_page_by_title, get_page_by_title, list_pages, update_page
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,20 @@ async def route_action(intent: dict) -> str:
 
     loop = asyncio.get_event_loop()
 
-    if action == "create_event":
+    if action == "get_notion_page":
+        if not title or title == "Без названия":
+            return "Уточни название записи."
+        try:
+            page = await loop.run_in_executor(None, get_page_by_title, title)
+            if not page:
+                return f"Запись «{title}» не найдена в Notion."
+            date_info = f"\n📅 Дата: {page['date']}" if page.get("date") else "\n📅 Дата не указана"
+            return f"📝 {page['title']}{date_info}\n🔗 {page['url']}"
+        except Exception as e:
+            logger.error("Notion get page error: %s", e)
+            return f"Не удалось получить запись из Notion: {e}"
+
+    elif action == "create_event":
         if not intent.get("title"):
             return "Не удалось определить название события. Уточни, пожалуйста."
         try:
@@ -53,12 +66,13 @@ async def route_action(intent: dict) -> str:
         if not intent.get("title"):
             return "Не удалось определить название заметки. Уточни, пожалуйста."
         try:
-            url = await loop.run_in_executor(
+            url, date_set = await loop.run_in_executor(
                 None, create_page, title, description, intent.get("date")
             )
+            date_note = f"\n📅 {intent.get('date')}" if date_set else ("\n⚠️ Дата не сохранена — в базе нет поля типа «Дата»" if intent.get("date") else "")
             return (
                 f"Запись добавлена в Notion\n"
-                f"📝 {title}\n"
+                f"📝 {title}{date_note}\n"
                 f"🔗 {url}"
             )
         except Exception as e:

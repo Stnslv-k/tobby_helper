@@ -70,10 +70,12 @@ def create_page(title: str, description: str | None = None, date_str: str | None
         }
     }
 
+    date_set = False
     if date_str:
         date_prop = _get_date_property(client, db_id)
         if date_prop:
             properties[date_prop] = {"date": {"start": date_str}}
+            date_set = True
 
     children = []
     if description:
@@ -93,7 +95,7 @@ def create_page(title: str, description: str | None = None, date_str: str | None
 
     page_url = page.get("url", "")
     logger.info("Created Notion page: %s", page.get("id"))
-    return page_url
+    return page_url, date_set
 
 
 def find_page_by_title(title: str) -> str | None:
@@ -128,6 +130,26 @@ def update_page(page_url: str, date_str: str | None = None, title: str | None = 
     client.pages.update(page_id=page_id, properties=properties)
     logger.info("Updated Notion page: %s", page_id)
     return page_url
+
+
+def get_page_by_title(title: str) -> dict | None:
+    client = _get_client()
+    response = client.databases.query(database_id=_db_id())
+    for page in response.get("results", []):
+        page_title = _extract_title(page)
+        if page_title.lower() == title.lower():
+            props = page.get("properties", {})
+            date_val = None
+            for prop in props.values():
+                if prop.get("type") == "date" and prop.get("date"):
+                    date_val = prop["date"].get("start")
+                    break
+            return {
+                "title": page_title,
+                "url": page.get("url", ""),
+                "date": date_val,
+            }
+    return None
 
 
 def list_pages(limit: int = 5) -> list[dict]:
