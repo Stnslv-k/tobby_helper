@@ -43,9 +43,9 @@ def _get_date_property(client: Client, db_id: str) -> str | None:
     date_fields = [name for name, prop in props.items() if prop["type"] == "date"]
     if not date_fields:
         return None
-    # Предпочитаем поле с "publish" в названии
+    # Предпочитаем поле с "film" в названии
     for name in date_fields:
-        if "publish" in name.lower():
+        if "film" in name.lower():
             return name
     return date_fields[0]
 
