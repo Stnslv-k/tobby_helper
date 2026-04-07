@@ -39,10 +39,15 @@ def _get_title_property(client: Client, db_id: str) -> str:
 
 
 def _get_date_property(client: Client, db_id: str) -> str | None:
-    for name, prop in _get_db_properties(client, db_id).items():
-        if prop["type"] == "date":
+    props = _get_db_properties(client, db_id)
+    date_fields = [name for name, prop in props.items() if prop["type"] == "date"]
+    if not date_fields:
+        return None
+    # Предпочитаем поле с "publish" в названии
+    for name in date_fields:
+        if "publish" in name.lower():
             return name
-    return None
+    return date_fields[0]
 
 
 def _extract_title(page: dict) -> str:
