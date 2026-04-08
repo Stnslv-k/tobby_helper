@@ -13,7 +13,7 @@ from telegram.ext import (
     ContextTypes,
 )
 
-from config import TELEGRAM_BOT_TOKEN
+from config import TELEGRAM_BOT_TOKEN, ALLOWED_USER_IDS
 from whisper_service import transcribe
 from ollama_service import extract_intent, chat_reply
 from date_parser import extract_date_from_text
@@ -43,6 +43,17 @@ _setup_chat_id: int | None = None
 # ---------------------------------------------------------------------------
 # /start — onboarding
 # ---------------------------------------------------------------------------
+
+def _is_allowed(user_id: int) -> bool:
+    return not ALLOWED_USER_IDS or user_id in ALLOWED_USER_IDS
+
+
+async def _check_access(update: Update) -> bool:
+    if not _is_allowed(update.effective_user.id):
+        await update.effective_message.reply_text("У вас нет доступа к этому боту.")
+        return False
+    return True
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     cal_ok = is_calendar_configured()
@@ -254,10 +265,14 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 # ---------------------------------------------------------------------------
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _check_access(update):
+        return
     await process_input(update, update.message.text)
 
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _check_access(update):
+        return
     await update.message.reply_text("Транскрибирую голосовое сообщение...")
     voice = update.message.voice
     file = await context.bot.get_file(voice.file_id)

@@ -17,3 +17,8 @@ GOOGLE_TOKEN_FILE = os.getenv("GOOGLE_TOKEN_FILE", "credentials/token.json")
 
 NOTION_TOKEN = os.getenv("NOTION_TOKEN", "")
 NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID", "")
+
+# Белый список user ID через запятую, например: 123456789,987654321
+# Если пусто — бот доступен всем
+_allowed = os.getenv("ALLOWED_USER_IDS", "")
+ALLOWED_USER_IDS: set[int] = {int(x.strip()) for x in _allowed.split(",") if x.strip()}
