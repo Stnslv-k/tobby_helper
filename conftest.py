@@ -11,5 +11,7 @@ _REQUIRED_DEFAULTS = {
     "ASANA_PAT": "test_pat",
     "ASANA_WORKSPACE_GID": "ws_test",
 }
+# These defaults are set once at process start. Individual tests that care about
+# specific values must use monkeypatch to override them for proper isolation.
 for _key, _val in _REQUIRED_DEFAULTS.items():
     os.environ.setdefault(_key, _val)

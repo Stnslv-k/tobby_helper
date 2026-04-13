@@ -11,11 +11,11 @@ logger = logging.getLogger(__name__)
 _BASE = "https://app.asana.com/api/1.0"
 _TASK_FIELDS = "name,due_on,assignee,assignee.name,assignee.gid,completed,notes"
 
-# Module-level sync client — overridable in tests via monkeypatch
-_client = httpx.Client(
-    headers={"Authorization": f"Bearer {ASANA_PAT}"},
-    timeout=30,
-)
+def _get_client() -> httpx.Client:
+    return httpx.Client(
+        headers={"Authorization": f"Bearer {ASANA_PAT}"},
+        timeout=30,
+    )
 
 
 def create_task(
@@ -34,7 +34,7 @@ def create_task(
         payload["assignee"] = assignee_gid
     if project_gid:
         payload["projects"] = [project_gid]
-    resp = _client.post(f"{_BASE}/tasks", json={"data": payload})
+    resp = _get_client().post(f"{_BASE}/tasks", json={"data": payload})
     resp.raise_for_status()
     return resp.json()["data"]["gid"]
 
@@ -44,13 +44,15 @@ def get_tasks(
     assignee_gid: Optional[str] = None,
     limit: int = 20,
 ) -> list[dict]:
+    if not project_gid and not assignee_gid:
+        raise ValueError("get_tasks requires at least one of project_gid or assignee_gid")
     params: dict = {"opt_fields": _TASK_FIELDS, "limit": limit}
     if project_gid:
         params["project"] = project_gid
     if assignee_gid:
         params["assignee"] = assignee_gid
         params["workspace"] = ASANA_WORKSPACE_GID
-    resp = _client.get(f"{_BASE}/tasks", params=params)
+    resp = _get_client().get(f"{_BASE}/tasks", params=params)
     resp.raise_for_status()
     return [t for t in resp.json()["data"] if not t.get("completed")]
 
@@ -62,13 +64,15 @@ def update_task(task_gid: str, fields: dict) -> None:
     if "assignee" in fields:
         payload["assignee"] = fields["assignee"]
     if not payload:
+        logger.warning("update_task called with no recognised fields: %s", list(fields.keys()))
         return
-    resp = _client.put(f"{_BASE}/tasks/{task_gid}", json={"data": payload})
+    resp = _get_client().put(f"{_BASE}/tasks/{task_gid}", json={"data": payload})
     resp.raise_for_status()
 
 
 def search_user(name: str) -> Optional[str]:
-    resp = _client.get(
+    # Note: returns only the first page (~20 results). Sufficient for small workspaces.
+    resp = _get_client().get(
         f"{_BASE}/workspaces/{ASANA_WORKSPACE_GID}/users",
         params={"opt_fields": "name,gid"},
     )
@@ -81,7 +85,8 @@ def search_user(name: str) -> Optional[str]:
 
 
 def search_project(name: str) -> Optional[str]:
-    resp = _client.get(
+    # Note: returns only the first page (~20 results). Sufficient for small workspaces.
+    resp = _get_client().get(
         f"{_BASE}/workspaces/{ASANA_WORKSPACE_GID}/projects",
         params={"opt_fields": "name,gid"},
     )
@@ -104,7 +109,7 @@ def get_tasks_due_soon(days: list[int]) -> list[dict]:
         "due_on.before": (date.fromisoformat(sorted_dates[-1]) + timedelta(days=1)).isoformat(),
         "completed": "false",
     }
-    resp = _client.get(
+    resp = _get_client().get(
         f"{_BASE}/workspaces/{ASANA_WORKSPACE_GID}/tasks/search",
         params=params,
     )

@@ -20,7 +20,9 @@ def _resp(data, status=200):
 
 def test_create_task_returns_gid():
     import asana_service
-    with patch("asana_service._client") as mock_client:
+    with patch("asana_service._get_client") as mock_get_client:
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
         mock_client.post.return_value = _resp({"gid": "task_gid_1"})
         gid = asana_service.create_task(
             title="Написать отчёт",
@@ -39,7 +41,9 @@ def test_create_task_returns_gid():
 
 def test_create_task_without_optional_fields():
     import asana_service
-    with patch("asana_service._client") as mock_client:
+    with patch("asana_service._get_client") as mock_get_client:
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
         mock_client.post.return_value = _resp({"gid": "task_gid_2"})
         asana_service.create_task(
             title="Задача без полей",
@@ -56,7 +60,9 @@ def test_create_task_without_optional_fields():
 
 def test_search_user_found():
     import asana_service
-    with patch("asana_service._client") as mock_client:
+    with patch("asana_service._get_client") as mock_get_client:
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
         mock_client.get.return_value = _resp([
             {"gid": "u1", "name": "Иван Петров"},
             {"gid": "u2", "name": "Петр Иванов"},
@@ -67,7 +73,9 @@ def test_search_user_found():
 
 def test_search_user_not_found():
     import asana_service
-    with patch("asana_service._client") as mock_client:
+    with patch("asana_service._get_client") as mock_get_client:
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
         mock_client.get.return_value = _resp([{"gid": "u1", "name": "Петр Иванов"}])
         gid = asana_service.search_user("Несуществующий")
     assert gid is None
@@ -75,7 +83,9 @@ def test_search_user_not_found():
 
 def test_search_project_found():
     import asana_service
-    with patch("asana_service._client") as mock_client:
+    with patch("asana_service._get_client") as mock_get_client:
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
         mock_client.get.return_value = _resp([
             {"gid": "p1", "name": "Маркетинг"},
             {"gid": "p2", "name": "Разработка"},
@@ -86,7 +96,9 @@ def test_search_project_found():
 
 def test_update_task_due_date():
     import asana_service
-    with patch("asana_service._client") as mock_client:
+    with patch("asana_service._get_client") as mock_get_client:
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
         mock_client.put.return_value = _resp({"gid": "t1"})
         asana_service.update_task("t1", {"due_date": "2026-05-01"})
     body = mock_client.put.call_args[1]["json"]["data"]
@@ -99,7 +111,9 @@ def test_get_tasks_due_soon_filters_by_date():
     tomorrow = (today + timedelta(days=1)).isoformat()
     in_five = (today + timedelta(days=5)).isoformat()
 
-    with patch("asana_service._client") as mock_client:
+    with patch("asana_service._get_client") as mock_get_client:
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
         mock_client.get.return_value = _resp([
             {"gid": "t1", "name": "Задача 1", "due_on": tomorrow,
              "assignee": {"gid": "u1", "name": "Иван"}, "completed": False},
