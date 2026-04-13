@@ -34,8 +34,13 @@ def test_remove_nonexistent_returns_false(t):
 
 def test_set_and_get_telegram_id(t):
     t.add_member("Анна", "asana_gid_789", "@anna_tg")
-    t.set_telegram_id("Анна", 999888)
+    result = t.set_telegram_id("Анна", 999888)
+    assert result is True
     assert t.get_member("Анна")["telegram_id"] == 999888
+
+
+def test_set_telegram_id_nonexistent_returns_false(t):
+    assert t.set_telegram_id("Несуществующий", 12345) is False
 
 
 def test_get_member_by_telegram_id(t):

@@ -59,11 +59,13 @@ def get_member_by_asana_gid(asana_gid: str) -> Optional[dict]:
     return None
 
 
-def set_telegram_id(name: str, telegram_id: int) -> None:
+def set_telegram_id(name: str, telegram_id: int) -> bool:
     data = _load()
-    if name in data:
-        data[name]["telegram_id"] = telegram_id
-        _save(data)
+    if name not in data:
+        return False
+    data[name]["telegram_id"] = telegram_id
+    _save(data)
+    return True
 
 
 def is_allowed(telegram_id: int, admin_id: int) -> bool:
