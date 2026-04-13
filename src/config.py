@@ -3,22 +3,25 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+TELEGRAM_BOT_TOKEN: str = os.environ["TELEGRAM_BOT_TOKEN"]
+ADMIN_TELEGRAM_ID: int = int(os.environ["ADMIN_TELEGRAM_ID"])
 
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "")
+ASANA_PAT: str = os.environ["ASANA_PAT"]
+ASANA_WORKSPACE_GID: str = os.environ["ASANA_WORKSPACE_GID"]
 
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small")
-WHISPER_LANGUAGE = os.getenv("WHISPER_LANGUAGE", "ru")
+LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "ollama")
+OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
+OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+OLLAMA_API_KEY: str = os.getenv("OLLAMA_API_KEY", "")
+OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
-GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "credentials/credentials.json")
-GOOGLE_TOKEN_FILE = os.getenv("GOOGLE_TOKEN_FILE", "credentials/token.json")
+WHISPER_MODEL: str = os.getenv("WHISPER_MODEL", "small")
+WHISPER_LANGUAGE: str = os.getenv("WHISPER_LANGUAGE", "ru")
 
-NOTION_TOKEN = os.getenv("NOTION_TOKEN", "")
-NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID", "")
+_days_raw: str = os.getenv("DEADLINE_NOTIFY_DAYS", "1,2")
+DEADLINE_NOTIFY_DAYS: list[int] = [int(d.strip()) for d in _days_raw.split(",")]
+NOTIFY_TIME: str = os.getenv("NOTIFY_TIME", "09:00")
 
-# Белый список user ID через запятую, например: 123456789,987654321
-# Если пусто — бот доступен всем
-_allowed = os.getenv("ALLOWED_USER_IDS", "")
-ALLOWED_USER_IDS: set[int] = {int(x.strip()) for x in _allowed.split(",") if x.strip()}
+TEAM_FILE: str = os.getenv("TEAM_FILE", "data/team.json")
+RATE_LIMIT_SECONDS: int = int(os.getenv("RATE_LIMIT_SECONDS", "3"))
