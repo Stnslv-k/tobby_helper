@@ -10,6 +10,8 @@ ASANA_PAT: str = os.environ["ASANA_PAT"]
 ASANA_WORKSPACE_GID: str = os.environ["ASANA_WORKSPACE_GID"]
 
 LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "ollama")
+if LLM_PROVIDER not in {"ollama", "openai"}:
+    raise ValueError(f"LLM_PROVIDER must be 'ollama' or 'openai', got: {LLM_PROVIDER!r}")
 OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 OLLAMA_API_KEY: str = os.getenv("OLLAMA_API_KEY", "")
