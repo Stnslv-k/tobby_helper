@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from datetime import date
 
 import httpx
@@ -58,11 +59,10 @@ def _intent_system() -> str:
 
 def _strip_fences(raw: str) -> str:
     raw = raw.strip()
-    if raw.startswith("```"):
-        parts = raw.split("```")
-        raw = parts[1] if len(parts) > 1 else raw
-        if raw.startswith("json"):
-            raw = raw[4:]
+    # Remove opening fence (```json or ```) with optional newline
+    raw = re.sub(r"^```(?:json)?\s*\n?", "", raw)
+    # Remove closing fence
+    raw = re.sub(r"\n?```\s*$", "", raw)
     return raw.strip()
 
 
@@ -119,7 +119,7 @@ async def extract_intent(text: str) -> dict:
             parsed = json.loads(raw)
             if parsed.get("action") not in _ALLOWED_ACTIONS:
                 parsed["action"] = "unknown"
-            return {**_EMPTY_INTENT, **parsed}
+            return {k: parsed.get(k, v) for k, v in _EMPTY_INTENT.items()}
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             logger.warning("Intent parse attempt %d failed: %s", attempt + 1, e)
         except Exception as e:
