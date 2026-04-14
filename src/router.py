@@ -1,131 +1,137 @@
 import asyncio
 import logging
-import re
+import time
 from datetime import date
+from typing import Optional
 
-from calendar_service import create_event, list_events
-from notion_service import create_page, find_page_by_title, get_page_by_title, list_pages, update_page
+import asana_service
+import config
 
 logger = logging.getLogger(__name__)
 
+_rate_limit_store: dict[int, float] = {}
 
-def _format_event(event: dict) -> str:
-    start = event["start"]
+
+def check_rate_limit(user_id: int) -> bool:
+    now = time.monotonic()
+    if now - _rate_limit_store.get(user_id, 0) < config.RATE_LIMIT_SECONDS:
+        return False
+    _rate_limit_store[user_id] = now
+    return True
+
+
+def _clean(value: Optional[str], max_len: int = 255) -> Optional[str]:
+    if not value:
+        return None
+    return str(value)[:max_len]
+
+
+def _valid_date(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
     try:
-        from datetime import datetime
-        dt = datetime.fromisoformat(start)
-        start = dt.strftime("%d.%m.%Y %H:%M")
+        date.fromisoformat(value)
+        return value
     except ValueError:
-        pass
-    link = f"\n🔗 {event['link']}" if event.get("link") else ""
-    return f"• {event['title']} — {start}{link}"
+        return None
 
 
-async def route_action(intent: dict) -> str:
-    logger.info("Routing intent: %s", intent)
-    action = intent.get("action", "unknown")
-    title = intent.get("title") or "Без названия"
-    event_date = intent.get("date") or date.today().isoformat()
-    event_time = intent.get("time")
-    description = intent.get("description")
-
+async def route_action(intent: dict, user_id: int) -> str:
     loop = asyncio.get_event_loop()
+    action = intent.get("action", "unknown")
+    title = _clean(intent.get("title"))
+    description = _clean(intent.get("description"), 2000)
+    due_date = _valid_date(intent.get("due_date"))
+    assignee_name = _clean(intent.get("assignee"))
+    project_name = _clean(intent.get("project"))
+    task_id = _clean(intent.get("task_id"))
+    update_fields = intent.get("update_fields") or {}
 
-    if action == "get_notion_page":
-        if not title or title == "Без названия":
-            return "Уточни название записи."
+    if action == "create_task":
+        if not title:
+            return "Не понял название задачи. Уточни, пожалуйста."
+        assignee_gid = (
+            await loop.run_in_executor(None, asana_service.search_user, assignee_name)
+            if assignee_name else None
+        )
+        project_gid = (
+            await loop.run_in_executor(None, asana_service.search_project, project_name)
+            if project_name else None
+        )
         try:
-            page = await loop.run_in_executor(None, get_page_by_title, title)
-            if not page:
-                return f"Запись «{title}» не найдена в Notion."
-            date_info = f"\n📅 Дата: {page['date']}" if page.get("date") else "\n📅 Дата не указана"
-            return f"📝 {page['title']}{date_info}\n🔗 {page['url']}"
-        except Exception as e:
-            logger.error("Notion get page error: %s", e)
-            return f"Не удалось получить запись из Notion: {e}"
-
-    elif action == "create_event":
-        if not intent.get("title"):
-            return "Не удалось определить название события. Уточни, пожалуйста."
-        try:
-            link = await loop.run_in_executor(
-                None, create_event, title, event_date, event_time, description
-            )
-            time_part = f" в {event_time}" if event_time else ""
-            return (
-                f"Событие создано в Google Calendar\n"
-                f"📅 {title}\n"
-                f"🗓 {event_date}{time_part}\n"
-                f"🔗 {link}"
-            )
-        except Exception as e:
-            logger.error("Calendar error: %s", e)
-            return f"Не удалось создать событие в Calendar: {e}"
-
-    elif action == "add_to_notion":
-        if not intent.get("title"):
-            return "Не удалось определить название заметки. Уточни, пожалуйста."
-        try:
-            url, date_set = await loop.run_in_executor(
-                None, create_page, title, description, intent.get("date")
-            )
-            date_note = f"\n📅 {intent.get('date')}" if date_set else ("\n⚠️ Дата не сохранена — в базе нет поля типа «Дата»" if intent.get("date") else "")
-            return (
-                f"Запись добавлена в Notion\n"
-                f"📝 {title}{date_note}\n"
-                f"🔗 {url}"
-            )
-        except Exception as e:
-            logger.error("Notion error: %s", e)
-            return f"Не удалось добавить запись в Notion: {e}"
-
-    elif action == "update_notion":
-        url = intent.get("url")
-        # Если URL не содержит 32-символьный ID — ищем по названию
-        if url and not re.search(r"[a-f0-9]{32}", url.replace("-", "")):
-            url = None
-        if not url and title and title != "Без названия":
-            url = await loop.run_in_executor(None, find_page_by_title, title)
-        if not url:
-            return "Не нашёл такую запись в Notion. Уточни название или дай ссылку."
-        try:
-            new_title = intent.get("title") if intent.get("url") else None
             await loop.run_in_executor(
-                None, update_page, url, intent.get("date"), new_title
+                None, asana_service.create_task,
+                title, description, due_date, assignee_gid, project_gid,
             )
-            return f"Запись обновлена в Notion:\n🔗 {url}"
+            parts = [f"Задача создана в Asana\n📋 {title}"]
+            if assignee_name:
+                label = f"✅ {assignee_name}" if assignee_gid else f"⚠️ {assignee_name} (не найден в Asana)"
+                parts.append(f"👤 {label}")
+            if project_name:
+                label = f"✅ {project_name}" if project_gid else f"⚠️ {project_name} (проект не найден)"
+                parts.append(f"📁 {label}")
+            if due_date:
+                parts.append(f"📅 {due_date}")
+            return "\n".join(parts)
         except Exception as e:
-            logger.error("Notion update error: %s", e)
-            return f"Не удалось обновить запись в Notion: {e}"
+            logger.error("Create task error: %s", e)
+            return f"Не удалось создать задачу: {e}"
 
-    elif action == "read_calendar":
+    elif action == "read_tasks":
+        project_gid = (
+            await loop.run_in_executor(None, asana_service.search_project, project_name)
+            if project_name else None
+        )
+        assignee_gid = (
+            await loop.run_in_executor(None, asana_service.search_user, assignee_name)
+            if assignee_name else None
+        )
         try:
-            events = await loop.run_in_executor(None, list_events, 7)
-            if not events:
-                return "В ближайшие 7 дней событий нет."
-            lines = ["Ближайшие события в Calendar:"] + [_format_event(e) for e in events]
+            tasks = await loop.run_in_executor(
+                None, asana_service.get_tasks, project_gid, assignee_gid
+            )
+            if not tasks:
+                return "Задач не найдено."
+            lines = ["Задачи:"]
+            for t in tasks[:10]:
+                due = f" — {t['due_on']}" if t.get("due_on") else ""
+                who = f" ({t['assignee']['name']})" if t.get("assignee") else ""
+                lines.append(f"• {t['name']}{who}{due}")
             return "\n".join(lines)
         except Exception as e:
-            logger.error("Calendar read error: %s", e)
-            return f"Не удалось получить события из Calendar: {e}"
+            logger.error("Read tasks error: %s", e)
+            return f"Не удалось получить задачи: {e}"
 
-    elif action == "read_notion":
+    elif action == "update_task":
+        if not task_id:
+            return "Для обновления задачи укажи её ID (gid из Asana)."
+        clean_fields: dict = {}
+        if "due_date" in update_fields:
+            v = _valid_date(update_fields["due_date"])
+            if v:
+                clean_fields["due_date"] = v
+        if "assignee" in update_fields:
+            new_name = _clean(update_fields["assignee"])
+            if new_name:
+                gid = await loop.run_in_executor(
+                    None, asana_service.search_user, new_name
+                )
+                if not gid:
+                    return f"Пользователь «{new_name}» не найден в Asana."
+                clean_fields["assignee"] = gid
+        if not clean_fields:
+            return "Нет распознанных полей для обновления."
         try:
-            pages = await loop.run_in_executor(None, list_pages, 5)
-            if not pages:
-                return "В Notion нет записей."
-            lines = ["Последние записи в Notion:"]
-            for p in pages:
-                lines.append(f"• {p['title']}\n  🔗 {p['url']}")
-            return "\n".join(lines)
+            await loop.run_in_executor(None, asana_service.update_task, task_id, clean_fields)
+            return "Задача обновлена."
         except Exception as e:
-            logger.error("Notion read error: %s", e)
-            return f"Не удалось получить записи из Notion: {e}"
+            logger.error("Update task error: %s", e)
+            return f"Не удалось обновить задачу: {e}"
 
     else:
         return (
-            "Не понял запрос. Попробуй сформулировать иначе, например:\n"
-            "• «Создай встречу завтра в 10:00»\n"
-            "• «Добавь в Notion задачу: написать отчёт»\n"
-            "• «Покажи события на неделю»"
+            "Не понял запрос. Попробуй:\n"
+            "• «Создай задачу для Ивана в проекте Маркетинг: написать отчёт до пятницы»\n"
+            "• «Покажи задачи проекта Разработка»\n"
+            "• «Обнови задачу [ID]: перенеси дедлайн на следующую неделю»"
         )
