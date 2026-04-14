@@ -1,30 +1,25 @@
+import asyncio
 import logging
 import os
 import tempfile
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
-    ConversationHandler,
-    CallbackQueryHandler,
     filters,
     ContextTypes,
 )
 
-from config import TELEGRAM_BOT_TOKEN, ALLOWED_USER_IDS
-from whisper_service import transcribe
-from ollama_service import extract_intent, chat_reply
+import asana_service
+from config import ADMIN_TELEGRAM_ID, TELEGRAM_BOT_TOKEN
 from date_parser import extract_date_from_text
-from router import route_action
-from user_config import (
-    is_calendar_configured,
-    is_notion_configured,
-    set as config_set,
-    get as config_get,
-)
-from oauth_handler import build_auth_url, register_auth_callback, start_oauth_server
+from llm_service import chat_reply, extract_intent
+from router import check_rate_limit, route_action
+import scheduler
+import team
+from whisper_service import transcribe
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -32,318 +27,199 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ConversationHandler states for Notion setup
-NOTION_STEP_TOKEN, NOTION_STEP_DB_ID = range(2)
-
-# Filled by the bot instance after Application is built
 _app: Application | None = None
-_setup_chat_id: int | None = None
 
 
 # ---------------------------------------------------------------------------
-# /start — onboarding
+# Access helpers
 # ---------------------------------------------------------------------------
 
-def _is_allowed(user_id: int) -> bool:
-    return not ALLOWED_USER_IDS or user_id in ALLOWED_USER_IDS
+def _is_admin(user_id: int) -> bool:
+    return user_id == ADMIN_TELEGRAM_ID
 
 
 async def _check_access(update: Update) -> bool:
-    if not _is_allowed(update.effective_user.id):
-        await update.effective_message.reply_text("У вас нет доступа к этому боту.")
-        return False
-    return True
+    user = update.effective_user
+    # Auto-register telegram_id for known team members by username
+    if user.username:
+        uname = f"@{user.username}"
+        for member in team.list_members():
+            if member.get("telegram_username") == uname and not member.get("telegram_id"):
+                team.set_telegram_id(member["name"], user.id)
+                logger.info("Registered telegram_id %d for %s", user.id, member["name"])
+    if team.is_allowed(user.id, ADMIN_TELEGRAM_ID):
+        return True
+    await update.effective_message.reply_text("У вас нет доступа к этому боту.")
+    return False
 
+
+# ---------------------------------------------------------------------------
+# /start
+# ---------------------------------------------------------------------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    cal_ok = is_calendar_configured()
-    notion_ok = is_notion_configured()
-
-    cal_icon = "✅" if cal_ok else "❌"
-    notion_icon = "✅" if notion_ok else "❌"
-
-    text = (
-        "Привет! Я голосовой ассистент.\n\n"
-        f"{cal_icon} Google Calendar {'подключён' if cal_ok else 'не настроен'}\n"
-        f"{notion_icon} Notion {'подключён' if notion_ok else 'не настроен'}\n\n"
-    )
-
-    buttons = []
-    if not cal_ok:
-        buttons.append([InlineKeyboardButton("🔗 Подключить Google Calendar", callback_data="setup_calendar")])
-    if not notion_ok:
-        buttons.append([InlineKeyboardButton("📝 Подключить Notion", callback_data="setup_notion")])
-
-    if not buttons:
-        text += (
-            "Всё готово! Отправь голосовое сообщение или текст, например:\n"
-            "• «Создай встречу завтра в 15:00»\n"
-            "• «Добавь в Notion идею про новый проект»\n"
-            "• «Покажи события на неделю»"
+    if not await _check_access(update):
+        return
+    if _is_admin(update.effective_user.id):
+        text = (
+            "Привет, Админ!\n\n"
+            "Управление командой:\n"
+            "• /add_member Иван @ivan_tg\n"
+            "• /list_members\n"
+            "• /remove_member Иван\n\n"
+            "Или отправь голосовое/текстовое сообщение с задачей."
         )
     else:
-        text += "Для начала работы подключи интеграции:"
-
-    markup = InlineKeyboardMarkup(buttons) if buttons else None
-    await update.message.reply_text(text, reply_markup=markup)
+        text = (
+            "Привет! Отправь голосовое или текстовое сообщение, например:\n"
+            "• «Создай задачу для Ивана в проекте Маркетинг: написать отчёт до пятницы»\n"
+            "• «Покажи задачи проекта Разработка»"
+        )
+    await update.message.reply_text(text)
 
 
 # ---------------------------------------------------------------------------
-# /setup_calendar — Google OAuth via link
+# Team management commands (admin only)
 # ---------------------------------------------------------------------------
 
-async def setup_calendar_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await _send_calendar_auth_link(update.effective_chat.id, context)
-
-
-async def setup_calendar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer()
-    await _send_calendar_auth_link(update.effective_chat.id, context)
-
-
-async def _send_calendar_auth_link(chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
-    global _setup_chat_id
-
-    credentials_file = os.getenv("GOOGLE_CREDENTIALS_FILE", "/app/credentials/credentials.json")
-    if not os.path.exists(credentials_file):
-        await context.bot.send_message(
-            chat_id,
-            "⚠️ Файл credentials.json не найден.\n\n"
-            "Попроси администратора разместить его по пути:\n"
-            f"`{credentials_file}`",
-            parse_mode="Markdown",
+async def cmd_add_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _check_access(update):
+        return
+    if not _is_admin(update.effective_user.id):
+        await update.message.reply_text("Эта команда только для администратора.")
+        return
+    args = context.args or []
+    if len(args) < 2 or not args[-1].startswith("@"):
+        await update.message.reply_text("Использование: /add_member Имя @username")
+        return
+    username = args[-1]
+    name = " ".join(args[:-1])
+    await update.message.reply_text(f"Ищу «{name}» в Asana...")
+    loop = asyncio.get_event_loop()
+    asana_gid = await loop.run_in_executor(None, asana_service.search_user, name)
+    if not asana_gid:
+        await update.message.reply_text(
+            f"Пользователь «{name}» не найден в Asana. Проверь написание имени."
         )
         return
-
-    host = os.getenv("OAUTH_PUBLIC_HOST", "http://localhost:8080")
-    redirect_uri = f"{host}/oauth_callback"
-
-    try:
-        auth_url, _ = build_auth_url(redirect_uri)
-        _setup_chat_id = chat_id
-
-        await context.bot.send_message(
-            chat_id,
-            "Для подключения Google Calendar:\n\n"
-            "1. Нажми кнопку ниже\n"
-            "2. Войди в свой аккаунт Google\n"
-            "3. Разреши доступ к Calendar\n"
-            "4. Вернись сюда — бот подтвердит подключение\n\n"
-            "🔒 Токен сохраняется только на сервере бота.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("Авторизоваться в Google", url=auth_url)
-            ]]),
-        )
-    except FileNotFoundError:
-        await context.bot.send_message(
-            chat_id,
-            "⚠️ Не найден файл credentials.json. Обратись к администратору.",
-        )
-
-
-# ---------------------------------------------------------------------------
-# Notion setup — ConversationHandler
-# ---------------------------------------------------------------------------
-
-async def setup_notion_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    team.add_member(name, asana_gid, username)
     await update.message.reply_text(
-        "Настройка Notion. Нужно 2 значения.\n\n"
-        "*Шаг 1 из 2 — Integration Token*\n\n"
-        "1. Перейди на https://www.notion.so/my-integrations\n"
-        "2. Нажми «New integration»\n"
-        "3. Дай название (например: «Мой бот»)\n"
-        "4. Нажми «Submit»\n"
-        "5. Скопируй *Internal Integration Token* (начинается с `secret_`)\n\n"
-        "Отправь токен сюда:",
-        parse_mode="Markdown",
-    )
-    return NOTION_STEP_TOKEN
-
-
-async def setup_notion_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-    await context.bot.send_message(
-        update.effective_chat.id,
-        "Настройка Notion. Нужно 2 значения.\n\n"
-        "*Шаг 1 из 2 — Integration Token*\n\n"
-        "1. Перейди на https://www.notion.so/my-integrations\n"
-        "2. Нажми «New integration»\n"
-        "3. Дай название (например: «Мой бот»)\n"
-        "4. Нажми «Submit»\n"
-        "5. Скопируй *Internal Integration Token* (начинается с `secret_`)\n\n"
-        "Отправь токен сюда:",
-        parse_mode="Markdown",
-    )
-    return NOTION_STEP_TOKEN
-
-
-async def notion_receive_token(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    token = update.message.text.strip()
-    if not token.startswith(("secret_", "ntn_")):
-        await update.message.reply_text(
-            "Токен должен начинаться с `secret_` или `ntn_`. Попробуй ещё раз:",
-            parse_mode="Markdown",
-        )
-        return NOTION_STEP_TOKEN
-
-    context.user_data["notion_token_temp"] = token
-
-    await update.message.reply_text(
-        "Токен принят.\n\n"
-        "*Шаг 2 из 2 — ID базы данных*\n\n"
-        "1. Открой нужную базу данных в Notion\n"
-        "2. Нажми «Share» → «Invite» → выбери свою интеграцию\n"
-        "3. Скопируй ID из URL:\n"
-        "   `https://notion.so/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx?v=...`\n"
-        "   Это 32 символа после последнего `/` и до `?`\n\n"
-        "Отправь ID базы данных:",
-        parse_mode="Markdown",
-    )
-    return NOTION_STEP_DB_ID
-
-
-async def notion_receive_db_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    raw = update.message.text.strip()
-    # Accept both with and without hyphens
-    db_id = raw.replace("-", "")
-    if len(db_id) != 32 or not db_id.isalnum():
-        await update.message.reply_text(
-            "ID должен содержать 32 символа (буквы и цифры). Попробуй ещё раз:",
-        )
-        return NOTION_STEP_DB_ID
-
-    # Normalise to UUID format
-    db_id_formatted = f"{db_id[:8]}-{db_id[8:12]}-{db_id[12:16]}-{db_id[16:20]}-{db_id[20:]}"
-
-    token = context.user_data.pop("notion_token_temp")
-    config_set("notion_token", token)
-    config_set("notion_database_id", db_id_formatted)
-
-    await update.message.reply_text(
-        "Notion успешно подключён!\n\n"
-        "Теперь можешь говорить:\n"
-        "• «Добавь в Notion задачу: написать отчёт»\n"
-        "• «Что у меня в Notion?»"
-    )
-    return ConversationHandler.END
-
-
-async def notion_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data.pop("notion_token_temp", None)
-    await update.message.reply_text("Настройка Notion отменена.")
-    return ConversationHandler.END
-
-
-# ---------------------------------------------------------------------------
-# OAuth completion callback (called from oauth_handler)
-# ---------------------------------------------------------------------------
-
-async def _on_oauth_complete(success: bool, message: str) -> None:
-    if _app and _setup_chat_id:
-        icon = "✅" if success else "❌"
-        await _app.bot.send_message(_setup_chat_id, f"{icon} {message}")
-
-
-# ---------------------------------------------------------------------------
-# /status
-# ---------------------------------------------------------------------------
-
-async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    cal_icon = "✅" if is_calendar_configured() else "❌"
-    notion_icon = "✅" if is_notion_configured() else "❌"
-    await update.message.reply_text(
-        f"Статус интеграций:\n\n"
-        f"{cal_icon} Google Calendar\n"
-        f"{notion_icon} Notion"
+        f"Участник добавлен:\n👤 {name}\n📱 {username}\n\n"
+        f"Как только {username} напишет боту — уведомления активируются."
     )
 
 
+async def cmd_list_members(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _check_access(update):
+        return
+    if not _is_admin(update.effective_user.id):
+        await update.message.reply_text("Эта команда только для администратора.")
+        return
+    members = team.list_members()
+    if not members:
+        await update.message.reply_text("Команда пуста. Добавь участников: /add_member Имя @username")
+        return
+    lines = ["Члены команды:"]
+    for m in members:
+        if m.get("telegram_id"):
+            tg = f"✅ {m['telegram_username']}"
+        else:
+            tg = f"⏳ {m.get('telegram_username', '—')} (ещё не писал боту)"
+        lines.append(f"• {m['name']} — {tg}")
+    await update.message.reply_text("\n".join(lines))
+
+
+async def cmd_remove_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _check_access(update):
+        return
+    if not _is_admin(update.effective_user.id):
+        await update.message.reply_text("Эта команда только для администратора.")
+        return
+    if not context.args:
+        await update.message.reply_text("Использование: /remove_member Имя")
+        return
+    name = " ".join(context.args)
+    if team.remove_member(name):
+        await update.message.reply_text(f"Участник «{name}» удалён.")
+    else:
+        await update.message.reply_text(f"Участник «{name}» не найден.")
+
+
 # ---------------------------------------------------------------------------
-# Main message handlers
+# Message handlers
 # ---------------------------------------------------------------------------
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _check_access(update):
         return
-    await process_input(update, update.message.text)
+    if not check_rate_limit(update.effective_user.id):
+        await update.message.reply_text("Подожди пару секунд перед следующим запросом.")
+        return
+    await _process_input(update, update.message.text)
 
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _check_access(update):
         return
+    if not check_rate_limit(update.effective_user.id):
+        await update.message.reply_text("Подожди пару секунд перед следующим запросом.")
+        return
     await update.message.reply_text("Транскрибирую голосовое сообщение...")
     voice = update.message.voice
     file = await context.bot.get_file(voice.file_id)
-
     with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
         tmp_path = tmp.name
-
     try:
         await file.download_to_drive(tmp_path)
         text = await transcribe(tmp_path)
         await update.message.reply_text(f"Распознано: {text}")
-        await process_input(update, text)
+        await _process_input(update, text)
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
 
 
-async def process_input(update: Update, text: str) -> None:
+async def _process_input(update: Update, text: str) -> None:
     await update.message.reply_text("Обрабатываю запрос...")
     try:
         intent = await extract_intent(text)
         if intent.get("action") == "unknown":
             response = await chat_reply(text)
         else:
-            if not intent.get("date"):
-                intent["date"] = extract_date_from_text(text)
-            response = await route_action(intent)
+            if not intent.get("due_date"):
+                intent["due_date"] = extract_date_from_text(text)
+            response = await route_action(intent, user_id=update.effective_user.id)
         await update.message.reply_text(response)
     except Exception as e:
         logger.error("Error processing input: %s", e)
-        await update.message.reply_text("Произошла ошибка при обработке запроса. Попробуй ещё раз.")
+        await update.message.reply_text("Произошла ошибка. Попробуй ещё раз.")
 
 
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
+async def _send_notification(chat_id: int, text: str) -> None:
+    if _app:
+        await _app.bot.send_message(chat_id, text)
+
+
 def main() -> None:
     global _app
-
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     _app = app
 
-    register_auth_callback(_on_oauth_complete)
-
-    # Notion setup conversation
-    notion_conv = ConversationHandler(
-        entry_points=[
-            CommandHandler("setup_notion", setup_notion_command),
-            CallbackQueryHandler(setup_notion_callback, pattern="^setup_notion$"),
-        ],
-        states={
-            NOTION_STEP_TOKEN: [MessageHandler(filters.TEXT & ~filters.COMMAND, notion_receive_token)],
-            NOTION_STEP_DB_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, notion_receive_db_id)],
-        },
-        fallbacks=[CommandHandler("cancel", notion_cancel)],
-    )
-
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("status", status))
-    app.add_handler(CommandHandler("setup_calendar", setup_calendar_command))
-    app.add_handler(notion_conv)
-    app.add_handler(CallbackQueryHandler(setup_calendar_callback, pattern="^setup_calendar$"))
+    app.add_handler(CommandHandler("add_member", cmd_add_member))
+    app.add_handler(CommandHandler("list_members", cmd_list_members))
+    app.add_handler(CommandHandler("remove_member", cmd_remove_member))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
 
     async def post_init(application: Application) -> None:
-        await start_oauth_server()
+        scheduler.start_scheduler(_send_notification)
 
     app.post_init = post_init
-
     logger.info("Bot started")
     app.run_polling(drop_pending_updates=True)
 
