@@ -37,32 +37,6 @@ def test_llm_provider_defaults_to_ollama(monkeypatch):
     assert cfg.LLM_PROVIDER == "ollama"
 
 
-def test_llm_provider_zai_accepted(monkeypatch):
-    cfg = _reload_config(
-        monkeypatch,
-        TELEGRAM_BOT_TOKEN="tok",
-        ADMIN_TELEGRAM_ID="1",
-        ASANA_PAT="p",
-        ASANA_WORKSPACE_GID="w",
-        LLM_PROVIDER="zai",
-    )
-    assert cfg.LLM_PROVIDER == "zai"
-
-
-def test_zai_api_key_loaded(monkeypatch):
-    cfg = _reload_config(
-        monkeypatch,
-        TELEGRAM_BOT_TOKEN="tok",
-        ADMIN_TELEGRAM_ID="1",
-        ASANA_PAT="p",
-        ASANA_WORKSPACE_GID="w",
-        ZAI_API_KEY="test-key",
-        ZAI_MODEL="glm-4.7",
-    )
-    assert cfg.ZAI_API_KEY == "test-key"
-    assert cfg.ZAI_MODEL == "glm-4.7"
-
-
 def test_deadline_notify_days_parsed(monkeypatch):
     cfg = _reload_config(
         monkeypatch,

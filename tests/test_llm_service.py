@@ -59,18 +59,6 @@ def test_extract_intent_openai_provider(monkeypatch):
     assert result["project"] == "Разработка"
 
 
-def test_extract_intent_zai_provider(monkeypatch):
-    lm = _reload(monkeypatch, "zai")
-    expected = {"action": "create_task", "title": "Презентация", "description": None,
-                "due_date": None, "assignee": "Анна", "project": None,
-                "task_id": None, "update_fields": None}
-    with patch.object(lm, "_zai_complete", new=AsyncMock(return_value=json.dumps(expected))):
-        import asyncio
-        result = asyncio.run(lm.extract_intent("создай задачу для Анны"))
-    assert result["action"] == "create_task"
-    assert result["assignee"] == "Анна"
-
-
 def test_extract_intent_strips_markdown_fences(monkeypatch):
     lm = _reload(monkeypatch, "ollama")
     payload = {"action": "create_task", "title": "X", "description": None,

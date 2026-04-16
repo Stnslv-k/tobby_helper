@@ -12,8 +12,6 @@ from config import (
     OLLAMA_MODEL,
     OPENAI_API_KEY,
     OPENAI_MODEL,
-    ZAI_API_KEY,
-    ZAI_MODEL,
 )
 
 logger = logging.getLogger(__name__)
@@ -107,31 +105,9 @@ async def _openai_complete(system: str, user: str) -> str:
         return resp.json()["choices"][0]["message"]["content"]
 
 
-_ZAI_BASE = "https://api.z.ai/api/paas/v4"
-
-
-async def _zai_complete(system: str, user: str) -> str:
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.post(
-            f"{_ZAI_BASE}/chat/completions",
-            headers={"Authorization": f"Bearer {ZAI_API_KEY}"},
-            json={
-                "model": ZAI_MODEL,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-            },
-        )
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
-
-
 async def _complete(system: str, user: str) -> str:
     if LLM_PROVIDER == "openai":
         return await _openai_complete(system, user)
-    if LLM_PROVIDER == "zai":
-        return await _zai_complete(system, user)
     return await _ollama_complete(system, user)
 
 
