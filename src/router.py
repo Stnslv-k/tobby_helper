@@ -196,12 +196,15 @@ async def dispatch_tool(name: str, arguments: dict) -> str:
         return json.dumps(projects, ensure_ascii=False)
 
     elif name == "update_task":
+        task_gid = arguments.get("task_gid", "")
+        if not str(task_gid).isdigit():
+            return f"error: task_gid must be a numeric Asana GID, got '{task_gid}'"
         fields = dict(arguments.get("fields", {}))
         if "assignee" in fields and not str(fields["assignee"]).isdigit():
             del fields["assignee"]
         await loop.run_in_executor(
             None, asana_service.update_task,
-            arguments["task_gid"],
+            task_gid,
             fields,
         )
         return "updated"

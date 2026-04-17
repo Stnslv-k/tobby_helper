@@ -86,9 +86,20 @@ def test_dispatch_update_task_returns_updated():
     from router import dispatch_tool
     with patch("router.asana_service.update_task", return_value=None):
         result = asyncio.run(
-            dispatch_tool("update_task", {"task_gid": "t1", "fields": {"due_date": "2026-04-20"}})
+            dispatch_tool("update_task", {"task_gid": "1234567890", "fields": {"due_date": "2026-04-20"}})
         )
     assert result == "updated"
+
+
+def test_dispatch_update_task_rejects_fake_gid():
+    """Hallucinated non-numeric task_gid must never reach Asana API."""
+    from router import dispatch_tool
+    with patch("router.asana_service.update_task") as mock:
+        result = asyncio.run(
+            dispatch_tool("update_task", {"task_gid": "not_found_3", "fields": {}})
+        )
+    mock.assert_not_called()
+    assert "error" in result.lower()
 
 
 def test_dispatch_unknown_tool_returns_error_string():
