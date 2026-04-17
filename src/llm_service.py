@@ -212,6 +212,14 @@ _ASANA_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "list_users",
+            "description": "Получить список всех пользователей в рабочем пространстве Asana с их именами и gid.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "update_task",
             "description": "Обновить поля задачи в Asana (срок, исполнитель).",
             "parameters": {

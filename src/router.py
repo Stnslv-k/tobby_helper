@@ -195,6 +195,10 @@ async def dispatch_tool(name: str, arguments: dict) -> str:
         projects = await loop.run_in_executor(None, asana_service.list_projects)
         return json.dumps(projects, ensure_ascii=False)
 
+    elif name == "list_users":
+        users = await loop.run_in_executor(None, asana_service.list_users)
+        return json.dumps(users, ensure_ascii=False)
+
     elif name == "update_task":
         task_gid = arguments.get("task_gid", "")
         if not str(task_gid).isdigit():

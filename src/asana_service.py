@@ -46,15 +46,29 @@ def get_tasks(
 ) -> list[dict]:
     if not project_gid and not assignee_gid:
         raise ValueError("get_tasks requires at least one of project_gid or assignee_gid")
-    params: dict = {"opt_fields": _TASK_FIELDS, "limit": limit}
+    client = _get_client()
+    seen: dict[str, dict] = {}
+
     if project_gid:
-        params["project"] = project_gid
+        resp = client.get(f"{_BASE}/tasks", params={
+            "project": project_gid, "opt_fields": _TASK_FIELDS, "limit": limit,
+        })
+        resp.raise_for_status()
+        for t in resp.json()["data"]:
+            if not t.get("completed"):
+                seen[t["gid"]] = t
+
     if assignee_gid:
-        params["assignee"] = assignee_gid
-        params["workspace"] = ASANA_WORKSPACE_GID
-    resp = _get_client().get(f"{_BASE}/tasks", params=params)
-    resp.raise_for_status()
-    return [t for t in resp.json()["data"] if not t.get("completed")]
+        resp = client.get(f"{_BASE}/tasks", params={
+            "assignee": assignee_gid, "workspace": ASANA_WORKSPACE_GID,
+            "opt_fields": _TASK_FIELDS, "limit": limit,
+        })
+        resp.raise_for_status()
+        for t in resp.json()["data"]:
+            if not t.get("completed"):
+                seen[t["gid"]] = t
+
+    return list(seen.values())
 
 
 def update_task(task_gid: str, fields: dict) -> None:
@@ -68,6 +82,15 @@ def update_task(task_gid: str, fields: dict) -> None:
         return
     resp = _get_client().put(f"{_BASE}/tasks/{task_gid}", json={"data": payload})
     resp.raise_for_status()
+
+
+def list_users() -> list[dict]:
+    resp = _get_client().get(
+        f"{_BASE}/workspaces/{ASANA_WORKSPACE_GID}/users",
+        params={"opt_fields": "name,gid"},
+    )
+    resp.raise_for_status()
+    return resp.json()["data"]
 
 
 def search_user(name: str) -> Optional[str]:
