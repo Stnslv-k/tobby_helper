@@ -8,7 +8,7 @@ from unittest.mock import patch
 def mock_config(monkeypatch):
     import config
     monkeypatch.setattr(config, "DEADLINE_NOTIFY_DAYS", [1, 2])
-    monkeypatch.setattr(config, "ADMIN_TELEGRAM_ID", 12345)
+    monkeypatch.setattr(config, "ADMIN_TELEGRAM_IDS", [12345, 99999])
 
 
 def _task(name, gid, due_on, assignee_gid=None, assignee_name=None):
@@ -34,11 +34,12 @@ def test_notifies_admin_and_assignee():
         asyncio.run(scheduler._check_deadlines(send_message=fake_send))
 
     chat_ids = [m[0] for m in sent]
-    assert 12345 in chat_ids
-    assert 77777 in chat_ids
+    assert 12345 in chat_ids  # первый админ
+    assert 99999 in chat_ids  # второй админ
+    assert 77777 in chat_ids  # исполнитель
 
 
-def test_notifies_only_admin_when_no_telegram_id():
+def test_notifies_only_admins_when_no_telegram_id():
     import scheduler
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
     tasks = [_task("Задача", "t2", tomorrow, "u2", "Петр")]
@@ -54,8 +55,10 @@ def test_notifies_only_admin_when_no_telegram_id():
          patch("scheduler.team.get_member_by_asana_gid", return_value=fake_member):
         asyncio.run(scheduler._check_deadlines(send_message=fake_send))
 
-    assert len(sent) == 1
-    assert sent[0][0] == 12345
+    chat_ids = [m[0] for m in sent]
+    assert 12345 in chat_ids
+    assert 99999 in chat_ids
+    assert len(sent) == 2  # только два админа, без исполнителя
 
 
 def test_no_notifications_when_no_tasks():

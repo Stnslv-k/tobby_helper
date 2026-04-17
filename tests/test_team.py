@@ -67,17 +67,21 @@ def test_get_member_by_asana_gid_not_found(t):
 
 
 def test_is_allowed_admin(t):
-    assert t.is_allowed(12345, admin_id=12345) is True
+    assert t.is_allowed(12345, admin_ids=[12345]) is True
+
+
+def test_is_allowed_one_of_multiple_admins(t):
+    assert t.is_allowed(22222, admin_ids=[12345, 22222, 33333]) is True
 
 
 def test_is_allowed_team_member(t):
     t.add_member("Дима", "asana_gid_222", "@dima_tg")
     t.set_telegram_id("Дима", 77777)
-    assert t.is_allowed(77777, admin_id=12345) is True
+    assert t.is_allowed(77777, admin_ids=[12345]) is True
 
 
 def test_is_allowed_stranger(t):
-    assert t.is_allowed(99999, admin_id=12345) is False
+    assert t.is_allowed(99999, admin_ids=[12345]) is False
 
 
 def test_list_members(t):

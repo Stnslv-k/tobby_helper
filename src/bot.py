@@ -13,7 +13,7 @@ from telegram.ext import (
 )
 
 import asana_service
-from config import ADMIN_TELEGRAM_ID, TELEGRAM_BOT_TOKEN
+from config import ADMIN_TELEGRAM_IDS, TELEGRAM_BOT_TOKEN
 from date_parser import extract_date_from_text
 from llm_service import chat_reply, extract_intent
 from router import check_rate_limit, route_action
@@ -35,7 +35,7 @@ _app: Application | None = None
 # ---------------------------------------------------------------------------
 
 def _is_admin(user_id: int) -> bool:
-    return user_id == ADMIN_TELEGRAM_ID
+    return user_id in ADMIN_TELEGRAM_IDS
 
 
 async def _check_access(update: Update) -> bool:
@@ -47,7 +47,7 @@ async def _check_access(update: Update) -> bool:
             if member.get("telegram_username") == uname and not member.get("telegram_id"):
                 team.set_telegram_id(member["name"], user.id)
                 logger.info("Registered telegram_id %d for %s", user.id, member["name"])
-    if team.is_allowed(user.id, ADMIN_TELEGRAM_ID):
+    if team.is_allowed(user.id, ADMIN_TELEGRAM_IDS):
         return True
     await update.effective_message.reply_text("У вас нет доступа к этому боту.")
     return False

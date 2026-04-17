@@ -6,7 +6,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 import asana_service
 import team
-from config import ADMIN_TELEGRAM_ID, DEADLINE_NOTIFY_DAYS, NOTIFY_TIME
+from config import ADMIN_TELEGRAM_IDS, DEADLINE_NOTIFY_DAYS, NOTIFY_TIME
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,8 @@ async def _check_deadlines(
         if assignee_name:
             admin_text += f" для {assignee_name}"
         admin_text += f" — дедлайн {due_on}"
-        await send_message(ADMIN_TELEGRAM_ID, admin_text)
+        for admin_id in ADMIN_TELEGRAM_IDS:
+            await send_message(admin_id, admin_text)
 
         if assignee_gid:
             member = team.get_member_by_asana_gid(assignee_gid)

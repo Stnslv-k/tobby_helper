@@ -15,14 +15,25 @@ def test_required_vars_loaded(monkeypatch):
     cfg = _reload_config(
         monkeypatch,
         TELEGRAM_BOT_TOKEN="tok",
-        ADMIN_TELEGRAM_ID="12345",
+        ADMIN_TELEGRAM_IDS="12345",
         ASANA_PAT="pat",
         ASANA_WORKSPACE_GID="ws",
     )
     assert cfg.TELEGRAM_BOT_TOKEN == "tok"
-    assert cfg.ADMIN_TELEGRAM_ID == 12345
+    assert cfg.ADMIN_TELEGRAM_IDS == [12345]
     assert cfg.ASANA_PAT == "pat"
     assert cfg.ASANA_WORKSPACE_GID == "ws"
+
+
+def test_admin_telegram_ids_multiple(monkeypatch):
+    cfg = _reload_config(
+        monkeypatch,
+        TELEGRAM_BOT_TOKEN="tok",
+        ADMIN_TELEGRAM_IDS="111,222,333",
+        ASANA_PAT="p",
+        ASANA_WORKSPACE_GID="w",
+    )
+    assert cfg.ADMIN_TELEGRAM_IDS == [111, 222, 333]
 
 
 def test_llm_provider_defaults_to_ollama(monkeypatch):
@@ -30,7 +41,7 @@ def test_llm_provider_defaults_to_ollama(monkeypatch):
     cfg = _reload_config(
         monkeypatch,
         TELEGRAM_BOT_TOKEN="tok",
-        ADMIN_TELEGRAM_ID="1",
+        ADMIN_TELEGRAM_IDS="1",
         ASANA_PAT="p",
         ASANA_WORKSPACE_GID="w",
     )
@@ -41,7 +52,7 @@ def test_deadline_notify_days_parsed(monkeypatch):
     cfg = _reload_config(
         monkeypatch,
         TELEGRAM_BOT_TOKEN="tok",
-        ADMIN_TELEGRAM_ID="1",
+        ADMIN_TELEGRAM_IDS="1",
         ASANA_PAT="p",
         ASANA_WORKSPACE_GID="w",
         DEADLINE_NOTIFY_DAYS="1,3",
@@ -54,7 +65,7 @@ def test_deadline_notify_days_default(monkeypatch):
     cfg = _reload_config(
         monkeypatch,
         TELEGRAM_BOT_TOKEN="tok",
-        ADMIN_TELEGRAM_ID="1",
+        ADMIN_TELEGRAM_IDS="1",
         ASANA_PAT="p",
         ASANA_WORKSPACE_GID="w",
     )

@@ -68,8 +68,8 @@ def set_telegram_id(name: str, telegram_id: int) -> bool:
     return True
 
 
-def is_allowed(telegram_id: int, admin_id: int) -> bool:
-    if telegram_id == admin_id:
+def is_allowed(telegram_id: int, admin_ids: list[int]) -> bool:
+    if telegram_id in admin_ids:
         return True
     return get_member_by_telegram_id(telegram_id) is not None
 

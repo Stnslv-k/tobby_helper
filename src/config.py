@@ -4,7 +4,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TELEGRAM_BOT_TOKEN: str = os.environ["TELEGRAM_BOT_TOKEN"]
-ADMIN_TELEGRAM_ID: int = int(os.environ["ADMIN_TELEGRAM_ID"])
+_admin_raw: str = os.environ["ADMIN_TELEGRAM_IDS"]
+ADMIN_TELEGRAM_IDS: list[int] = [int(x.strip()) for x in _admin_raw.split(",")]
 
 ASANA_PAT: str = os.environ["ASANA_PAT"]
 ASANA_WORKSPACE_GID: str = os.environ["ASANA_WORKSPACE_GID"]
