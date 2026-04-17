@@ -89,6 +89,18 @@ def test_unknown_action_returns_help_text():
     assert "Не понял" in result
 
 
+def test_list_projects_returns_names():
+    import router
+    projects = [
+        {"gid": "p1", "name": "Маркетинг"},
+        {"gid": "p2", "name": "Разработка"},
+    ]
+    with patch("router.asana_service.list_projects", return_value=projects):
+        result = asyncio.run(router.route_action(_intent("list_projects"), user_id=1))
+    assert "Маркетинг" in result
+    assert "Разработка" in result
+
+
 def test_read_tasks_returns_list():
     import router
     tasks = [

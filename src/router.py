@@ -108,6 +108,19 @@ async def route_action(intent: dict, user_id: int) -> str:
             logger.error("Read tasks error: %s", e)
             return f"Не удалось получить задачи: {e}"
 
+    elif action == "list_projects":
+        try:
+            projects = await loop.run_in_executor(None, asana_service.list_projects)
+            if not projects:
+                return "Проектов не найдено."
+            lines = ["Проекты в Asana:"]
+            for p in projects:
+                lines.append(f"• {p['name']}")
+            return "\n".join(lines)
+        except Exception as e:
+            logger.error("List projects error: %s", e)
+            return f"Не удалось получить список проектов: {e}"
+
     elif action == "update_task":
         if not task_id:
             return "Для обновления задачи укажи её ID (gid из Asana)."

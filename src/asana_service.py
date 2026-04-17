@@ -84,6 +84,15 @@ def search_user(name: str) -> Optional[str]:
     return None
 
 
+def list_projects() -> list[dict]:
+    resp = _get_client().get(
+        f"{_BASE}/workspaces/{ASANA_WORKSPACE_GID}/projects",
+        params={"opt_fields": "name,gid"},
+    )
+    resp.raise_for_status()
+    return resp.json()["data"]
+
+
 def search_project(name: str) -> Optional[str]:
     # Note: returns only the first page (~20 results). Sufficient for small workspaces.
     resp = _get_client().get(

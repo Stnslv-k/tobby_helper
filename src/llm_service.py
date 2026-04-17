@@ -16,7 +16,7 @@ from config import (
 
 logger = logging.getLogger(__name__)
 
-_ALLOWED_ACTIONS = {"create_task", "update_task", "read_tasks", "unknown"}
+_ALLOWED_ACTIONS = {"create_task", "update_task", "read_tasks", "list_projects", "unknown"}
 
 _EMPTY_INTENT: dict = {
     "action": "unknown",
@@ -33,7 +33,7 @@ _INTENT_SYSTEM = """\
 Ты парсер команд для управления задачами в Asana.
 Извлеки намерение и верни ТОЛЬКО валидный JSON:
 {{
-  "action": "create_task | update_task | read_tasks | unknown",
+  "action": "create_task | update_task | read_tasks | list_projects | unknown",
   "title": "название задачи или null",
   "description": "описание или null",
   "due_date": "YYYY-MM-DD или null",

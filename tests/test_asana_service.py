@@ -124,3 +124,18 @@ def test_get_tasks_due_soon_filters_by_date():
 
     assert len(tasks) == 1
     assert tasks[0]["gid"] == "t1"
+
+
+def test_list_projects_returns_all():
+    import asana_service
+    with patch("asana_service._get_client") as mock_get_client:
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+        mock_client.get.return_value = _resp([
+            {"gid": "p1", "name": "Маркетинг"},
+            {"gid": "p2", "name": "Разработка"},
+            {"gid": "p3", "name": "Продажи"},
+        ])
+        projects = asana_service.list_projects()
+    assert len(projects) == 3
+    assert projects[0]["name"] == "Маркетинг"
