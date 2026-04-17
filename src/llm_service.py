@@ -66,29 +66,31 @@ def _strip_fences(raw: str) -> str:
     return raw.strip()
 
 
-async def _ollama_complete(system: str, user: str) -> str:
+async def _ollama_complete(system: str, user: str, json_mode: bool = False) -> str:
     headers = {}
     if OLLAMA_API_KEY:
         headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
+    payload: dict = {
+        "model": OLLAMA_MODEL,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "stream": False,
+    }
+    if json_mode:
+        payload["format"] = "json"
     async with httpx.AsyncClient(timeout=180.0) as client:
         resp = await client.post(
             f"{OLLAMA_BASE_URL}/api/chat",
             headers=headers,
-            json={
-                "model": OLLAMA_MODEL,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                "stream": False,
-                "format": "json",
-            },
+            json=payload,
         )
         resp.raise_for_status()
         return resp.json()["message"]["content"]
 
 
-async def _openai_complete(system: str, user: str) -> str:
+async def _openai_complete(system: str, user: str, json_mode: bool = False) -> str:
     async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.post(
             "https://api.openai.com/v1/chat/completions",
@@ -105,16 +107,16 @@ async def _openai_complete(system: str, user: str) -> str:
         return resp.json()["choices"][0]["message"]["content"]
 
 
-async def _complete(system: str, user: str) -> str:
+async def _complete(system: str, user: str, json_mode: bool = False) -> str:
     if LLM_PROVIDER == "openai":
-        return await _openai_complete(system, user)
-    return await _ollama_complete(system, user)
+        return await _openai_complete(system, user, json_mode)
+    return await _ollama_complete(system, user, json_mode)
 
 
 async def extract_intent(text: str) -> dict:
     for attempt in range(3):
         try:
-            raw = await _complete(_intent_system(), text)
+            raw = await _complete(_intent_system(), text, json_mode=True)
             raw = _strip_fences(raw)
             parsed = json.loads(raw)
             if parsed.get("action") not in _ALLOWED_ACTIONS:
