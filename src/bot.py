@@ -14,9 +14,8 @@ from telegram.ext import (
 
 import asana_service
 from config import ADMIN_TELEGRAM_IDS, TELEGRAM_BOT_TOKEN
-from date_parser import extract_date_from_text
-from llm_service import chat_reply, extract_intent
-from router import check_rate_limit, route_action
+from llm_service import process_message
+from router import check_rate_limit
 import scheduler
 import team
 from whisper_service import transcribe
@@ -182,13 +181,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def _process_input(update: Update, text: str) -> None:
     await update.message.reply_text("Обрабатываю запрос...")
     try:
-        intent = await extract_intent(text)
-        if intent.get("action") == "unknown":
-            response = await chat_reply(text)
-        else:
-            if not intent.get("due_date"):
-                intent["due_date"] = extract_date_from_text(text)
-            response = await route_action(intent, user_id=update.effective_user.id)
+        response = await process_message(text)
         await update.message.reply_text(response)
     except Exception as e:
         logger.error("Error processing input: %s", e)

@@ -136,3 +136,171 @@ async def chat_reply(text: str) -> str:
     except Exception as e:
         logger.error("Chat reply failed: %s", e)
         return "Не удалось получить ответ. Попробуй ещё раз."
+
+
+# ── Tool calling (Ollama) ────────────────────────────────────────────────────
+
+_ASANA_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_user",
+            "description": "Найти пользователя в Asana по имени. Возвращает gid или 'not_found'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Имя пользователя по-русски"}
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_project",
+            "description": "Найти проект в Asana по названию. Возвращает gid или 'not_found'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Название проекта по-русски"}
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_task",
+            "description": "Создать новую задачу в Asana.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Название задачи"},
+                    "description": {"type": "string", "description": "Описание задачи"},
+                    "due_date": {"type": "string", "description": "Срок выполнения YYYY-MM-DD"},
+                    "assignee_gid": {"type": "string", "description": "GID исполнителя из search_user"},
+                    "project_gid": {"type": "string", "description": "GID проекта из search_project"},
+                },
+                "required": ["title"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_tasks",
+            "description": "Получить список задач из Asana по проекту или исполнителю.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "project_gid": {"type": "string", "description": "GID проекта"},
+                    "assignee_gid": {"type": "string", "description": "GID исполнителя"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_projects",
+            "description": "Получить список всех проектов в рабочем пространстве Asana.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_task",
+            "description": "Обновить поля задачи в Asana (срок, исполнитель).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_gid": {"type": "string", "description": "GID задачи"},
+                    "fields": {
+                        "type": "object",
+                        "description": "Поля для обновления",
+                        "properties": {
+                            "due_date": {"type": "string", "description": "Новый срок YYYY-MM-DD"},
+                            "assignee": {"type": "string", "description": "GID нового исполнителя"},
+                        },
+                    },
+                },
+                "required": ["task_gid", "fields"],
+            },
+        },
+    },
+]
+
+_TOOL_SYSTEM = (
+    "Ты помощник команды для управления задачами в Asana. "
+    "Сегодня: {today}. "
+    "Отвечай кратко по-русски. "
+    "Используй инструменты для любых операций с задачами и проектами. "
+    "Если нужен исполнитель или проект — сначала вызови search_user/search_project, "
+    "чтобы получить gid, затем используй его в create_task или update_task. "
+    "Если вопрос не про задачи — вежливо объясни, что умеешь."
+)
+
+
+def _tool_system() -> str:
+    return _TOOL_SYSTEM.format(today=date.today().isoformat())
+
+
+async def _ollama_raw_chat(messages: list, tools: list) -> dict:
+    """POST to Ollama /api/chat with tools, return raw response dict."""
+    headers = {}
+    if OLLAMA_API_KEY:
+        headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
+    payload: dict = {
+        "model": OLLAMA_MODEL,
+        "messages": messages,
+        "tools": tools,
+        "stream": False,
+    }
+    async with httpx.AsyncClient(timeout=180.0) as client:
+        resp = await client.post(
+            f"{OLLAMA_BASE_URL}/api/chat",
+            headers=headers,
+            json=payload,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def process_message(text: str) -> str:
+    """Process user message using Ollama tool calling loop."""
+    import router  # late import — avoids circular dependency
+
+    messages: list = [
+        {"role": "system", "content": _tool_system()},
+        {"role": "user", "content": text},
+    ]
+
+    for _ in range(10):  # cap iterations to prevent runaway loops
+        response = await _ollama_raw_chat(messages, _ASANA_TOOLS)
+        msg = response["message"]
+        tool_calls = msg.get("tool_calls") or []
+
+        if not tool_calls:
+            return msg.get("content") or "Не удалось получить ответ."
+
+        # Append the assistant turn (with tool_calls) to history
+        messages.append(msg)
+
+        # Execute every tool call in this turn
+        for call in tool_calls:
+            fn = call["function"]
+            name = fn["name"]
+            # Ollama returns arguments as a dict; OpenAI returns a JSON string — handle both
+            args = fn["arguments"] if isinstance(fn["arguments"], dict) else json.loads(fn["arguments"])
+            try:
+                result = await router.dispatch_tool(name, args)
+            except Exception as e:
+                logger.error("Tool %s raised: %s", name, e)
+                result = f"error: {e}"
+
+            messages.append({"role": "tool", "content": str(result)})
+
+    return "Достигнуто максимальное число шагов."

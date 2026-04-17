@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import time
 from datetime import date
@@ -154,3 +155,50 @@ async def route_action(intent: dict, user_id: int) -> str:
             "• «Покажи задачи проекта Разработка»\n"
             "• «Обнови задачу [ID]: перенеси дедлайн на следующую неделю»"
         )
+
+
+async def dispatch_tool(name: str, arguments: dict) -> str:
+    """Execute an Asana tool by name and return a string result for the LLM."""
+    loop = asyncio.get_event_loop()
+
+    if name == "search_user":
+        result = await loop.run_in_executor(None, asana_service.search_user, arguments["name"])
+        return result or "not_found"
+
+    elif name == "search_project":
+        result = await loop.run_in_executor(None, asana_service.search_project, arguments["name"])
+        return result or "not_found"
+
+    elif name == "create_task":
+        gid = await loop.run_in_executor(
+            None, asana_service.create_task,
+            arguments["title"],
+            arguments.get("description"),
+            arguments.get("due_date"),
+            arguments.get("assignee_gid"),
+            arguments.get("project_gid"),
+        )
+        return gid
+
+    elif name == "get_tasks":
+        tasks = await loop.run_in_executor(
+            None, asana_service.get_tasks,
+            arguments.get("project_gid"),
+            arguments.get("assignee_gid"),
+        )
+        return json.dumps(tasks, ensure_ascii=False)
+
+    elif name == "list_projects":
+        projects = await loop.run_in_executor(None, asana_service.list_projects)
+        return json.dumps(projects, ensure_ascii=False)
+
+    elif name == "update_task":
+        await loop.run_in_executor(
+            None, asana_service.update_task,
+            arguments["task_gid"],
+            arguments.get("fields", {}),
+        )
+        return "updated"
+
+    else:
+        return f"unknown tool: {name}"
