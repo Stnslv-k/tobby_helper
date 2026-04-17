@@ -170,13 +170,16 @@ async def dispatch_tool(name: str, arguments: dict) -> str:
         return result or "not_found"
 
     elif name == "create_task":
+        def _valid_gid(v) -> Optional[str]:
+            return v if v and str(v).isdigit() else None
+
         gid = await loop.run_in_executor(
             None, asana_service.create_task,
             arguments["title"],
             arguments.get("description"),
             arguments.get("due_date"),
-            arguments.get("assignee_gid"),
-            arguments.get("project_gid"),
+            _valid_gid(arguments.get("assignee_gid")),
+            _valid_gid(arguments.get("project_gid")),
         )
         return gid
 
@@ -193,10 +196,13 @@ async def dispatch_tool(name: str, arguments: dict) -> str:
         return json.dumps(projects, ensure_ascii=False)
 
     elif name == "update_task":
+        fields = dict(arguments.get("fields", {}))
+        if "assignee" in fields and not str(fields["assignee"]).isdigit():
+            del fields["assignee"]
         await loop.run_in_executor(
             None, asana_service.update_task,
             arguments["task_gid"],
-            arguments.get("fields", {}),
+            fields,
         )
         return "updated"
 

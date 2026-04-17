@@ -45,9 +45,23 @@ def test_dispatch_search_project_found():
 
 def test_dispatch_create_task_returns_gid():
     from router import dispatch_tool
-    with patch("router.asana_service.create_task", return_value="task_gid_new"):
+    with patch("router.asana_service.create_task", return_value="task_gid_new") as mock:
         result = asyncio.run(dispatch_tool("create_task", {"title": "Отчёт"}))
     assert result == "task_gid_new"
+
+
+def test_dispatch_create_task_strips_not_found_gids():
+    """'not_found' from search_user/search_project must not reach Asana API."""
+    from router import dispatch_tool
+    with patch("router.asana_service.create_task", return_value="t1") as mock:
+        asyncio.run(dispatch_tool("create_task", {
+            "title": "Задача",
+            "assignee_gid": "not_found",
+            "project_gid": "not_found",
+        }))
+    _, _, _, assignee_gid, project_gid = mock.call_args[0]
+    assert assignee_gid is None
+    assert project_gid is None
 
 
 def test_dispatch_list_projects_returns_json():
