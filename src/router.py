@@ -86,6 +86,12 @@ async def route_action(intent: dict, user_id: int) -> str:
             await loop.run_in_executor(None, asana_service.search_user, assignee_name)
             if assignee_name else None
         )
+        if not project_gid and not assignee_gid:
+            return (
+                "Уточни запрос, например:\n"
+                "• «Покажи задачи проекта Маркетинг»\n"
+                "• «Покажи задачи Ивана»"
+            )
         try:
             tasks = await loop.run_in_executor(
                 None, asana_service.get_tasks, project_gid, assignee_gid
