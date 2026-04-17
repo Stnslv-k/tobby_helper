@@ -113,15 +113,17 @@ def test_dispatch_unknown_tool_returns_error_string():
 def test_process_message_plain_response():
     """LLM returns plain text with no tool calls — returned as-is."""
     import llm_service
+    llm_service.clear_history(1)
     with patch.object(llm_service, "_ollama_raw_chat",
                       new=AsyncMock(return_value=_text_response("Привет!"))):
-        result = asyncio.run(llm_service.process_message("Привет"))
+        result = asyncio.run(llm_service.process_message("Привет", user_id=1))
     assert result == "Привет!"
 
 
 def test_process_message_single_tool_call():
     """LLM calls list_projects once, receives result, returns final answer."""
     import llm_service
+    llm_service.clear_history(2)
     call_count = 0
 
     async def fake_raw_chat(messages, tools):
@@ -134,7 +136,7 @@ def test_process_message_single_tool_call():
     projects = [{"gid": "p1", "name": "Маркетинг"}]
     with patch.object(llm_service, "_ollama_raw_chat", side_effect=fake_raw_chat), \
          patch("router.asana_service.list_projects", return_value=projects):
-        result = asyncio.run(llm_service.process_message("Покажи проекты"))
+        result = asyncio.run(llm_service.process_message("Покажи проекты", user_id=2))
 
     assert call_count == 2
     assert "Маркетинг" in result
@@ -143,6 +145,7 @@ def test_process_message_single_tool_call():
 def test_process_message_two_sequential_tool_calls():
     """LLM chains search_user then create_task — both dispatched correctly."""
     import llm_service
+    llm_service.clear_history(3)
     call_count = 0
 
     async def fake_raw_chat(messages, tools):
@@ -157,7 +160,7 @@ def test_process_message_two_sequential_tool_calls():
     with patch.object(llm_service, "_ollama_raw_chat", side_effect=fake_raw_chat), \
          patch("router.asana_service.search_user", return_value="gid_ivan"), \
          patch("router.asana_service.create_task", return_value="task_gid"):
-        result = asyncio.run(llm_service.process_message("Создай задачу для Ивана"))
+        result = asyncio.run(llm_service.process_message("Создай задачу для Ивана", user_id=3))
 
     assert call_count == 3
     assert "создана" in result.lower()
@@ -166,6 +169,7 @@ def test_process_message_two_sequential_tool_calls():
 def test_process_message_tool_error_continues_loop():
     """If a tool raises an exception, the error is fed back to LLM and loop continues."""
     import llm_service
+    llm_service.clear_history(4)
     call_count = 0
 
     async def fake_raw_chat(messages, tools):
@@ -177,8 +181,71 @@ def test_process_message_tool_error_continues_loop():
 
     with patch.object(llm_service, "_ollama_raw_chat", side_effect=fake_raw_chat), \
          patch("router.asana_service.list_projects", side_effect=RuntimeError("API недоступен")):
-        result = asyncio.run(llm_service.process_message("Покажи проекты"))
+        result = asyncio.run(llm_service.process_message("Покажи проекты", user_id=4))
 
     assert call_count == 2
     assert isinstance(result, str)
     assert len(result) > 0
+
+
+# ── history ───────────────────────────────────────────────────────────────────
+
+def test_history_is_sent_on_second_message():
+    """Second message includes first exchange in the messages array."""
+    import llm_service
+    llm_service.clear_history(10)
+
+    with patch.object(llm_service, "_ollama_raw_chat",
+                      new=AsyncMock(return_value=_text_response("Ответ 1"))):
+        asyncio.run(llm_service.process_message("Вопрос 1", user_id=10))
+
+    captured = []
+
+    async def capture(messages, tools):
+        captured.extend(messages)
+        return _text_response("Ответ 2")
+
+    with patch.object(llm_service, "_ollama_raw_chat", side_effect=capture):
+        asyncio.run(llm_service.process_message("Вопрос 2", user_id=10))
+
+    roles = [m["role"] for m in captured]
+    assert "system" in roles
+    # previous user + assistant turns must be present
+    assert roles.count("user") >= 2
+    assert roles.count("assistant") >= 1
+
+
+def test_history_capped_at_max_messages():
+    """History never exceeds HISTORY_MAX_MESSAGES entries."""
+    import llm_service
+    llm_service.clear_history(20)
+
+    with patch.object(llm_service, "_ollama_raw_chat",
+                      new=AsyncMock(return_value=_text_response("ok"))):
+        for i in range(30):
+            asyncio.run(llm_service.process_message(f"msg {i}", user_id=20))
+
+    assert len(llm_service._history[20]) <= llm_service.HISTORY_MAX_MESSAGES
+
+
+def test_clear_history_resets_context():
+    """After clear_history, second call starts with no prior context."""
+    import llm_service
+    llm_service.clear_history(30)
+
+    with patch.object(llm_service, "_ollama_raw_chat",
+                      new=AsyncMock(return_value=_text_response("Ответ 1"))):
+        asyncio.run(llm_service.process_message("Вопрос 1", user_id=30))
+
+    llm_service.clear_history(30)
+    captured = []
+
+    async def capture(messages, tools):
+        captured.extend(messages)
+        return _text_response("Ответ 2")
+
+    with patch.object(llm_service, "_ollama_raw_chat", side_effect=capture):
+        asyncio.run(llm_service.process_message("Вопрос 2", user_id=30))
+
+    # Only system + current user message — no history
+    assert len([m for m in captured if m["role"] == "user"]) == 1

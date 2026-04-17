@@ -271,14 +271,27 @@ async def _ollama_raw_chat(messages: list, tools: list) -> dict:
         return resp.json()
 
 
-async def process_message(text: str) -> str:
-    """Process user message using Ollama tool calling loop."""
+HISTORY_MAX_MESSAGES = 20  # max user+assistant turns kept per user
+
+_history: dict[int, list] = {}
+
+
+def clear_history(user_id: int) -> None:
+    _history.pop(user_id, None)
+
+
+async def process_message(text: str, user_id: int = 0) -> str:
+    """Process user message using Ollama tool calling loop with per-user history."""
     import router  # late import — avoids circular dependency
 
+    prior = _history.get(user_id, [])
     messages: list = [
         {"role": "system", "content": _tool_system()},
+        *prior,
         {"role": "user", "content": text},
     ]
+
+    final_reply: str = "Не удалось получить ответ."
 
     for _ in range(10):  # cap iterations to prevent runaway loops
         response = await _ollama_raw_chat(messages, _ASANA_TOOLS)
@@ -286,16 +299,17 @@ async def process_message(text: str) -> str:
         tool_calls = msg.get("tool_calls") or []
 
         if not tool_calls:
-            return msg.get("content") or "Не удалось получить ответ."
+            final_reply = msg.get("content") or final_reply
+            break
 
-        # Append the assistant turn (with tool_calls) to history
+        # Append the assistant turn (with tool_calls) to the working messages
         messages.append(msg)
 
         # Execute every tool call in this turn
         for call in tool_calls:
             fn = call["function"]
             name = fn["name"]
-            # Ollama returns arguments as a dict; OpenAI returns a JSON string — handle both
+            # Ollama returns arguments as a dict; OpenAI returns a JSON string
             args = fn["arguments"] if isinstance(fn["arguments"], dict) else json.loads(fn["arguments"])
             try:
                 result = await router.dispatch_tool(name, args)
@@ -304,5 +318,14 @@ async def process_message(text: str) -> str:
                 result = f"error: {e}"
 
             messages.append({"role": "tool", "content": str(result)})
+    else:
+        final_reply = "Достигнуто максимальное число шагов."
 
-    return "Достигнуто максимальное число шагов."
+    # Persist only plain user/assistant turns (skip system, tool, tool_calls turns)
+    new_history = prior + [
+        {"role": "user", "content": text},
+        {"role": "assistant", "content": final_reply},
+    ]
+    _history[user_id] = new_history[-HISTORY_MAX_MESSAGES:]
+
+    return final_reply
