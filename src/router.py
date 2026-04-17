@@ -199,6 +199,18 @@ async def dispatch_tool(name: str, arguments: dict) -> str:
         users = await loop.run_in_executor(None, asana_service.list_users)
         return json.dumps(users, ensure_ascii=False)
 
+    elif name == "search_tasks":
+        tasks = await loop.run_in_executor(None, asana_service.search_tasks, arguments["text"])
+        return json.dumps(tasks, ensure_ascii=False)
+
+    elif name == "add_task_to_project":
+        task_gid = arguments.get("task_gid", "")
+        project_gid = arguments.get("project_gid", "")
+        if not str(task_gid).isdigit() or not str(project_gid).isdigit():
+            return f"error: task_gid and project_gid must be numeric Asana GIDs"
+        await loop.run_in_executor(None, asana_service.add_task_to_project, task_gid, project_gid)
+        return "added"
+
     elif name == "update_task":
         task_gid = arguments.get("task_gid", "")
         if not str(task_gid).isdigit():

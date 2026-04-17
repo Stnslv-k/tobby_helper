@@ -130,6 +130,24 @@ def search_project(name: str) -> Optional[str]:
     return None
 
 
+def search_tasks(text: str, limit: int = 20) -> list[dict]:
+    """Search tasks by name substring across the workspace."""
+    resp = _get_client().get(
+        f"{_BASE}/workspaces/{ASANA_WORKSPACE_GID}/tasks/search",
+        params={"text": text, "opt_fields": _TASK_FIELDS, "limit": limit, "completed": "false"},
+    )
+    resp.raise_for_status()
+    return resp.json()["data"]
+
+
+def add_task_to_project(task_gid: str, project_gid: str) -> None:
+    resp = _get_client().post(
+        f"{_BASE}/tasks/{task_gid}/addProject",
+        json={"data": {"project": project_gid}},
+    )
+    resp.raise_for_status()
+
+
 def get_tasks_due_soon(days: list[int]) -> list[dict]:
     today = date.today()
     target_dates = {(today + timedelta(days=d)).isoformat() for d in days}

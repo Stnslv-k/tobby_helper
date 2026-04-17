@@ -220,6 +220,35 @@ _ASANA_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "search_tasks",
+            "description": "Найти задачи по части названия в рабочем пространстве Asana. Используй когда нужно найти gid задачи по её имени.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "Часть названия задачи для поиска"},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_task_to_project",
+            "description": "Добавить существующую задачу в проект Asana.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_gid":    {"type": "string", "description": "GID задачи"},
+                    "project_gid": {"type": "string", "description": "GID проекта"},
+                },
+                "required": ["task_gid", "project_gid"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "update_task",
             "description": "Обновить поля задачи в Asana (срок, исполнитель).",
             "parameters": {
