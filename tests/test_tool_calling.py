@@ -101,6 +101,45 @@ def test_dispatch_get_tasks_rejects_placeholder_project_gid():
     assert "search_project" in result
 
 
+def test_dispatch_assign_task_resolves_names_and_updates():
+    """assign_task finds task and user by name, then calls update_task."""
+    from router import dispatch_tool
+    tasks = [{"gid": "111222333444", "name": "Тестовая задача 1010"}]
+    with patch("router.asana_service.search_tasks", return_value=tasks) as st, \
+         patch("router.asana_service.search_user", return_value="u_gid_kos") as su, \
+         patch("router.asana_service.update_task", return_value=None) as ut:
+        result = asyncio.run(dispatch_tool("assign_task", {
+            "task_name": "Тестовая задача 1010",
+            "assignee_name": "kos",
+        }))
+    st.assert_called_once_with("Тестовая задача 1010")
+    su.assert_called_once_with("kos")
+    ut.assert_called_once_with("111222333444", {"assignee": "u_gid_kos"})
+    assert "updated" in result or "assigned" in result.lower()
+
+
+def test_dispatch_assign_task_task_not_found():
+    from router import dispatch_tool
+    with patch("router.asana_service.search_tasks", return_value=[]):
+        result = asyncio.run(dispatch_tool("assign_task", {
+            "task_name": "Несуществующая задача",
+            "assignee_name": "kos",
+        }))
+    assert "not found" in result.lower() or "не найден" in result.lower()
+
+
+def test_dispatch_assign_task_user_not_found():
+    from router import dispatch_tool
+    tasks = [{"gid": "111222333444", "name": "Тестовая задача"}]
+    with patch("router.asana_service.search_tasks", return_value=tasks), \
+         patch("router.asana_service.search_user", return_value=None):
+        result = asyncio.run(dispatch_tool("assign_task", {
+            "task_name": "Тестовая задача",
+            "assignee_name": "Незнакомец",
+        }))
+    assert "not found" in result.lower() or "не найден" in result.lower()
+
+
 def test_dispatch_get_tasks_rejects_empty_gids():
     """get_tasks called with no valid GIDs must return an instructive error, not raise."""
     from router import dispatch_tool
