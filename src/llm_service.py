@@ -350,21 +350,28 @@ async def process_message(text: str, user_id: int = 0) -> str:
 
     final_reply: str = "Не удалось получить ответ."
 
+    turn_start = len(messages)  # index of first message added during this turn
+
     for _ in range(10):  # cap iterations to prevent runaway loops
         response = await _ollama_raw_chat(messages, _ASANA_TOOLS)
         msg = response["message"]
         tool_calls = msg.get("tool_calls") or []
 
         # Fallback: some models emit tool calls as <tool_call> text
+        text_fallback = False
         if not tool_calls and msg.get("content"):
             tool_calls = _parse_text_tool_calls(msg["content"])
+            text_fallback = bool(tool_calls)
 
         if not tool_calls:
             final_reply = msg.get("content") or final_reply
             break
 
-        # Append the assistant turn (with tool_calls) to the working messages
-        messages.append(msg)
+        # For history: always store structured tool_calls (strip garbage text fallback)
+        if text_fallback:
+            messages.append({"role": "assistant", "content": "", "tool_calls": tool_calls})
+        else:
+            messages.append(msg)
 
         # Execute every tool call in this turn
         for call in tool_calls:
@@ -382,9 +389,11 @@ async def process_message(text: str, user_id: int = 0) -> str:
     else:
         final_reply = "Достигнуто максимальное число шагов."
 
-    # Persist only plain user/assistant turns (skip system, tool, tool_calls turns)
+    # Persist user turn + all tool interactions + final assistant reply
+    tool_turns = messages[turn_start:]
     new_history = prior + [
         {"role": "user", "content": text},
+        *tool_turns,
         {"role": "assistant", "content": final_reply},
     ]
     _history[user_id] = new_history[-HISTORY_MAX_MESSAGES:]

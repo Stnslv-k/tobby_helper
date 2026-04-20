@@ -268,6 +268,39 @@ def test_process_message_text_tool_call_with_preamble():
 
 # ── history ───────────────────────────────────────────────────────────────────
 
+def test_history_includes_tool_results_for_next_message():
+    """GIDs from tool results in turn N must be visible to the model in turn N+1."""
+    import llm_service
+    llm_service.clear_history(60)
+    call_count = 0
+
+    async def fake_turn1(messages, tools):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return _tool_response("list_projects", {})
+        return _text_response("Проект Kos project найден.")
+
+    projects = [{"gid": "1214099899858956", "name": "Kos project"}]
+    with patch.object(llm_service, "_ollama_raw_chat", side_effect=fake_turn1), \
+         patch("router.asana_service.list_projects", return_value=projects):
+        asyncio.run(llm_service.process_message("Покажи проекты", user_id=60))
+
+    captured = []
+
+    async def capture_turn2(messages, tools):
+        captured.extend(messages)
+        return _text_response("Задачи...")
+
+    with patch.object(llm_service, "_ollama_raw_chat", side_effect=capture_turn2):
+        asyncio.run(llm_service.process_message("Покажи задачи из этого проекта", user_id=60))
+
+    # Tool result JSON with the actual numeric GID must be in history,
+    # not just the project name (which comes from the assistant text reply)
+    all_content = " ".join(m.get("content", "") or "" for m in captured)
+    assert "1214099899858956" in all_content
+
+
 def test_history_is_sent_on_second_message():
     """Second message includes first exchange in the messages array."""
     import llm_service
