@@ -322,8 +322,9 @@ def test_process_message_text_tool_call_with_preamble():
 
 # ── history ───────────────────────────────────────────────────────────────────
 
-def test_history_includes_tool_results_for_next_message():
-    """GIDs from tool results in turn N must be visible to the model in turn N+1."""
+def test_history_has_no_tool_turns_to_avoid_context_overflow():
+    """Tool turns are NOT saved to history — qwen2.5 returns empty responses
+    when the context is flooded with tool JSON. Only user+assistant text is kept."""
     import llm_service
     llm_service.clear_history(60)
     call_count = 0
@@ -333,7 +334,7 @@ def test_history_includes_tool_results_for_next_message():
         call_count += 1
         if call_count == 1:
             return _tool_response("list_projects", {})
-        return _text_response("Проект Kos project найден.")
+        return _text_response("Проект Kos project.")
 
     projects = [{"gid": "1214099899858956", "name": "Kos project"}]
     with patch.object(llm_service, "_ollama_raw_chat", side_effect=fake_turn1), \
@@ -347,12 +348,14 @@ def test_history_includes_tool_results_for_next_message():
         return _text_response("Задачи...")
 
     with patch.object(llm_service, "_ollama_raw_chat", side_effect=capture_turn2):
-        asyncio.run(llm_service.process_message("Покажи задачи из этого проекта", user_id=60))
+        asyncio.run(llm_service.process_message("Покажи задачи", user_id=60))
 
-    # Tool result JSON with the actual numeric GID must be in history,
-    # not just the project name (which comes from the assistant text reply)
-    all_content = " ".join(m.get("content", "") or "" for m in captured)
-    assert "1214099899858956" in all_content
+    # History must NOT contain tool-role messages (they bloat context)
+    roles = [m["role"] for m in captured]
+    assert "tool" not in roles
+    # Only system + prior user/assistant + current user
+    assert roles.count("user") >= 2
+    assert roles.count("assistant") >= 1
 
 
 def test_history_is_sent_on_second_message():

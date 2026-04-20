@@ -281,7 +281,7 @@ _TOOL_SYSTEM = (
     "4. Для update_task task_gid должен быть числом из Asana — не придумывай его.\n"
     "5. Если вопрос не про задачи — вежливо объясни, что умеешь.\n"
     "6. Имена пользователей и проекты передавай в инструменты ТОЧНО как написал пользователь — не переводи на другой язык и не изменяй.\n"
-    "7. GID проекта берётся ТОЛЬКО из результатов search_project или list_projects. GID задачи (из create_task) — это НЕ GID проекта, не путай их.\n"
+    "7. Перед get_tasks всегда вызывай search_project чтобы получить project_gid. Никогда не используй GID задачи (из create_task) как GID проекта.\n"
     "8. Если пользователь говорит 'этот проект', 'эта задача' и т.п. — используй название/GID из контекста диалога, вызови search_project/search_user сам. Никогда не проси пользователя ещё раз назвать то, что уже упоминалось в диалоге.\n"
     "9. Вызывай get_tasks ОДИН раз за запрос — только с project_gid ИЛИ только с assignee_gid (не оба варианта отдельно). Не повторяй один и тот же инструмент с разными параметрами."
 )
@@ -351,8 +351,6 @@ async def process_message(text: str, user_id: int = 0) -> str:
 
     final_reply: str = "Не удалось получить ответ."
 
-    turn_start = len(messages)  # index of first message added during this turn
-
     for _ in range(10):  # cap iterations to prevent runaway loops
         response = await _ollama_raw_chat(messages, _ASANA_TOOLS)
         msg = response["message"]
@@ -368,7 +366,7 @@ async def process_message(text: str, user_id: int = 0) -> str:
             final_reply = msg.get("content") or final_reply
             break
 
-        # For history: always store structured tool_calls (strip garbage text fallback)
+        # Append assistant turn (always structured, strip text-fallback garbage)
         if text_fallback:
             messages.append({"role": "assistant", "content": "", "tool_calls": tool_calls})
         else:
@@ -390,11 +388,10 @@ async def process_message(text: str, user_id: int = 0) -> str:
     else:
         final_reply = "Достигнуто максимальное число шагов."
 
-    # Persist user turn + all tool interactions + final assistant reply
-    tool_turns = messages[turn_start:]
+    # Persist only plain user/assistant turns — tool-turn JSON floods context
+    # and causes qwen2.5 to return empty responses on subsequent messages.
     new_history = prior + [
         {"role": "user", "content": text},
-        *tool_turns,
         {"role": "assistant", "content": final_reply},
     ]
     _history[user_id] = new_history[-HISTORY_MAX_MESSAGES:]
