@@ -184,10 +184,16 @@ async def dispatch_tool(name: str, arguments: dict) -> str:
         return gid
 
     elif name == "get_tasks":
+        project_gid = arguments.get("project_gid")
+        assignee_gid = arguments.get("assignee_gid")
+        if project_gid and not str(project_gid).isdigit():
+            return "error: project_gid must be a numeric Asana GID — call search_project first to get it"
+        if assignee_gid and not str(assignee_gid).isdigit():
+            return "error: assignee_gid must be a numeric Asana GID — call search_user first to get it"
         tasks = await loop.run_in_executor(
             None, asana_service.get_tasks,
-            arguments.get("project_gid"),
-            arguments.get("assignee_gid"),
+            project_gid,
+            assignee_gid,
         )
         return json.dumps(tasks, ensure_ascii=False)
 

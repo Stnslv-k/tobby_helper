@@ -86,9 +86,28 @@ def test_dispatch_get_tasks_returns_json():
     from router import dispatch_tool
     tasks = [{"gid": "t1", "name": "Задача 1", "completed": False}]
     with patch("router.asana_service.get_tasks", return_value=tasks):
-        result = asyncio.run(dispatch_tool("get_tasks", {"project_gid": "p1"}))
+        result = asyncio.run(dispatch_tool("get_tasks", {"project_gid": "1214099899858956"}))
     data = json.loads(result)
     assert data[0]["name"] == "Задача 1"
+
+
+def test_dispatch_get_tasks_rejects_placeholder_project_gid():
+    """Hallucinated non-numeric project_gid must never reach Asana API."""
+    from router import dispatch_tool
+    with patch("router.asana_service.get_tasks") as mock:
+        result = asyncio.run(dispatch_tool("get_tasks", {"project_gid": "gid для проекта Kos"}))
+    mock.assert_not_called()
+    assert "error" in result.lower()
+    assert "search_project" in result
+
+
+def test_dispatch_get_tasks_rejects_placeholder_assignee_gid():
+    """Hallucinated assignee_gid string must never reach Asana API."""
+    from router import dispatch_tool
+    with patch("router.asana_service.get_tasks") as mock:
+        result = asyncio.run(dispatch_tool("get_tasks", {"assignee_gid": "some user gid"}))
+    mock.assert_not_called()
+    assert "error" in result.lower()
 
 
 def test_dispatch_update_task_returns_updated():
