@@ -68,6 +68,8 @@ def get_tasks(
         resp = client.get(f"{_BASE}/tasks", params={
             "project": project_gid, "opt_fields": _TASK_FIELDS, "limit": limit,
         })
+        if not resp.is_success:
+            logger.error("get_tasks project=%s → %s %s", project_gid, resp.status_code, resp.text[:300])
         resp.raise_for_status()
         for t in resp.json()["data"]:
             if not t.get("completed"):
@@ -78,6 +80,8 @@ def get_tasks(
             "assignee": assignee_gid, "workspace": ASANA_WORKSPACE_GID,
             "opt_fields": _TASK_FIELDS, "limit": limit,
         })
+        if not resp.is_success:
+            logger.error("get_tasks assignee=%s → %s %s", assignee_gid, resp.status_code, resp.text[:300])
         resp.raise_for_status()
         for t in resp.json()["data"]:
             if not t.get("completed"):

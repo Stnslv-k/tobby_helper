@@ -160,6 +160,7 @@ async def route_action(intent: dict, user_id: int) -> str:
 async def dispatch_tool(name: str, arguments: dict) -> str:
     """Execute an Asana tool by name and return a string result for the LLM."""
     loop = asyncio.get_event_loop()
+    logger.info("dispatch_tool: %s %s", name, arguments)
 
     if name == "search_user":
         result = await loop.run_in_executor(None, asana_service.search_user, arguments["name"])
