@@ -1,5 +1,6 @@
 import logging
 from datetime import date, timedelta
+from difflib import SequenceMatcher
 from typing import Optional
 
 import httpx
@@ -10,6 +11,20 @@ logger = logging.getLogger(__name__)
 
 _BASE = "https://app.asana.com/api/1.0"
 _TASK_FIELDS = "name,due_on,assignee,assignee.name,assignee.gid,completed,notes"
+
+def _fuzzy_match(query: str, name: str, cutoff: float = 0.6) -> bool:
+    """True if query loosely matches name (handles transcription errors like 'COS' → 'Kos')."""
+    q, n = query.lower(), name.lower()
+    if q in n:
+        return True
+    if SequenceMatcher(None, q, n).ratio() >= cutoff:
+        return True
+    for qt in q.split():
+        for nt in n.split():
+            if SequenceMatcher(None, qt, nt).ratio() >= cutoff:
+                return True
+    return False
+
 
 def _get_client() -> httpx.Client:
     return httpx.Client(
@@ -100,9 +115,8 @@ def search_user(name: str) -> Optional[str]:
         params={"opt_fields": "name,gid"},
     )
     resp.raise_for_status()
-    name_lower = name.lower()
     for user in resp.json()["data"]:
-        if name_lower in user["name"].lower():
+        if _fuzzy_match(name, user["name"]):
             return user["gid"]
     return None
 
@@ -123,9 +137,8 @@ def search_project(name: str) -> Optional[str]:
         params={"workspace": ASANA_WORKSPACE_GID, "opt_fields": "name,gid"},
     )
     resp.raise_for_status()
-    name_lower = name.lower()
     for project in resp.json()["data"]:
-        if name_lower in project["name"].lower():
+        if _fuzzy_match(name, project["name"]):
             return project["gid"]
     return None
 

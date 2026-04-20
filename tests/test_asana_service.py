@@ -81,6 +81,47 @@ def test_search_user_not_found():
     assert gid is None
 
 
+def test_search_user_fuzzy_match_transcription_error():
+    """Whisper often transcribes 'Kos' as 'COS' — fuzzy match should recover."""
+    import asana_service
+    with patch("asana_service._get_client") as mock_get_client:
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+        mock_client.get.return_value = _resp([
+            {"gid": "u1", "name": "Kos Ivanov"},
+            {"gid": "u2", "name": "Петр Иванов"},
+        ])
+        gid = asana_service.search_user("COS")
+    assert gid == "u1"
+
+
+def test_search_user_fuzzy_no_false_positive():
+    """'xyz' should not fuzzy-match 'Kos Ivanov'."""
+    import asana_service
+    with patch("asana_service._get_client") as mock_get_client:
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+        mock_client.get.return_value = _resp([
+            {"gid": "u1", "name": "Kos Ivanov"},
+        ])
+        gid = asana_service.search_user("xyz")
+    assert gid is None
+
+
+def test_search_project_fuzzy_match_transcription_error():
+    """'COS Project' should fuzzy-match 'Kos's Project'."""
+    import asana_service
+    with patch("asana_service._get_client") as mock_get_client:
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+        mock_client.get.return_value = _resp([
+            {"gid": "p1", "name": "Kos's Project"},
+            {"gid": "p2", "name": "Разработка"},
+        ])
+        gid = asana_service.search_project("COS Project")
+    assert gid == "p1"
+
+
 def test_search_project_found():
     import asana_service
     with patch("asana_service._get_client") as mock_get_client:
