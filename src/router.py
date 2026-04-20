@@ -200,6 +200,22 @@ async def dispatch_tool(name: str, arguments: dict) -> str:
         )
         return json.dumps(tasks, ensure_ascii=False)
 
+    elif name == "get_tasks_for_project":
+        project_name = arguments.get("project_name", "")
+        project_gid = await loop.run_in_executor(None, asana_service.search_project, project_name)
+        if not project_gid:
+            return f"error: project '{project_name}' not found in Asana"
+        tasks = await loop.run_in_executor(None, asana_service.get_tasks, project_gid, None)
+        return json.dumps(tasks, ensure_ascii=False)
+
+    elif name == "get_tasks_for_user":
+        user_name = arguments.get("user_name", "")
+        user_gid = await loop.run_in_executor(None, asana_service.search_user, user_name)
+        if not user_gid:
+            return f"error: user '{user_name}' not found in Asana"
+        tasks = await loop.run_in_executor(None, asana_service.get_tasks, None, user_gid)
+        return json.dumps(tasks, ensure_ascii=False)
+
     elif name == "list_projects":
         projects = await loop.run_in_executor(None, asana_service.list_projects)
         return json.dumps(projects, ensure_ascii=False)

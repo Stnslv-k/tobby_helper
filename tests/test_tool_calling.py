@@ -111,6 +111,39 @@ def test_dispatch_get_tasks_rejects_empty_gids():
     assert "search_project" in result or "search_user" in result
 
 
+def test_dispatch_get_tasks_for_project_resolves_name_and_returns_tasks():
+    """High-level tool: resolves project name to GID internally, returns tasks JSON."""
+    from router import dispatch_tool
+    tasks = [{"gid": "t1", "name": "Задача 1", "completed": False}]
+    with patch("router.asana_service.search_project", return_value="p_gid_123") as sp, \
+         patch("router.asana_service.get_tasks", return_value=tasks) as gt:
+        result = asyncio.run(dispatch_tool("get_tasks_for_project", {"project_name": "Kos project"}))
+    sp.assert_called_once_with("Kos project")
+    gt.assert_called_once_with("p_gid_123", None)
+    data = json.loads(result)
+    assert data[0]["name"] == "Задача 1"
+
+
+def test_dispatch_get_tasks_for_project_not_found():
+    from router import dispatch_tool
+    with patch("router.asana_service.search_project", return_value=None):
+        result = asyncio.run(dispatch_tool("get_tasks_for_project", {"project_name": "Нет такого"}))
+    assert "not found" in result.lower() or "не найден" in result.lower()
+
+
+def test_dispatch_get_tasks_for_user_resolves_name_and_returns_tasks():
+    """High-level tool: resolves user name to GID internally, returns tasks JSON."""
+    from router import dispatch_tool
+    tasks = [{"gid": "t2", "name": "Задача 2", "completed": False}]
+    with patch("router.asana_service.search_user", return_value="u_gid_456") as su, \
+         patch("router.asana_service.get_tasks", return_value=tasks) as gt:
+        result = asyncio.run(dispatch_tool("get_tasks_for_user", {"user_name": "Kos"}))
+    su.assert_called_once_with("Kos")
+    gt.assert_called_once_with(None, "u_gid_456")
+    data = json.loads(result)
+    assert data[0]["name"] == "Задача 2"
+
+
 def test_dispatch_get_tasks_deduplicates_results():
     """get_tasks called twice in the same session must not return duplicate tasks."""
     from router import dispatch_tool
