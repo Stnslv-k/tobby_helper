@@ -101,6 +101,16 @@ def test_dispatch_get_tasks_rejects_placeholder_project_gid():
     assert "search_project" in result
 
 
+def test_dispatch_get_tasks_rejects_empty_gids():
+    """get_tasks called with no valid GIDs must return an instructive error, not raise."""
+    from router import dispatch_tool
+    with patch("router.asana_service.get_tasks") as mock:
+        result = asyncio.run(dispatch_tool("get_tasks", {}))
+    mock.assert_not_called()
+    assert "error" in result.lower()
+    assert "search_project" in result or "search_user" in result
+
+
 def test_dispatch_get_tasks_deduplicates_results():
     """get_tasks called twice in the same session must not return duplicate tasks."""
     from router import dispatch_tool
