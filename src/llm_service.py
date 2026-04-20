@@ -317,6 +317,23 @@ def clear_history(user_id: int) -> None:
     _history.pop(user_id, None)
 
 
+_TEXT_TOOL_CALL_RE = re.compile(
+    r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.DOTALL
+)
+
+
+def _parse_text_tool_calls(content: str) -> list:
+    """Extract tool calls embedded as <tool_call>JSON</tool_call> in text content."""
+    calls = []
+    for m in _TEXT_TOOL_CALL_RE.finditer(content):
+        try:
+            data = json.loads(m.group(1))
+            calls.append({"function": {"name": data["name"], "arguments": data.get("arguments", {})}})
+        except (json.JSONDecodeError, KeyError):
+            continue
+    return calls
+
+
 async def process_message(text: str, user_id: int = 0) -> str:
     """Process user message using Ollama tool calling loop with per-user history."""
     import router  # late import — avoids circular dependency
@@ -334,6 +351,10 @@ async def process_message(text: str, user_id: int = 0) -> str:
         response = await _ollama_raw_chat(messages, _ASANA_TOOLS)
         msg = response["message"]
         tool_calls = msg.get("tool_calls") or []
+
+        # Fallback: some models emit tool calls as <tool_call> text
+        if not tool_calls and msg.get("content"):
+            tool_calls = _parse_text_tool_calls(msg["content"])
 
         if not tool_calls:
             final_reply = msg.get("content") or final_reply

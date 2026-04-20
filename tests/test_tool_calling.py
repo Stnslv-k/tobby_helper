@@ -20,6 +20,15 @@ def _tool_response(name: str, arguments: dict) -> dict:
     }}
 
 
+def _text_tool_call_response(name: str, arguments: dict) -> dict:
+    """Some models emit tool calls as <tool_call> text instead of structured tool_calls."""
+    body = json.dumps({"name": name, "arguments": arguments})
+    return {"message": {
+        "role": "assistant",
+        "content": f"<tool_call>\n{body}\n</tool_call>",
+    }}
+
+
 # ── dispatch_tool ─────────────────────────────────────────────────────────────
 
 def test_dispatch_search_user_found():
@@ -186,6 +195,56 @@ def test_process_message_tool_error_continues_loop():
     assert call_count == 2
     assert isinstance(result, str)
     assert len(result) > 0
+
+
+# ── text-based tool calls (fallback parsing) ─────────────────────────────────
+
+def test_process_message_text_tool_call_parsed():
+    """When LLM emits <tool_call> as text, bot still executes the tool."""
+    import llm_service
+    llm_service.clear_history(50)
+    call_count = 0
+
+    async def fake_raw_chat(messages, tools):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return _text_tool_call_response("list_projects", {})
+        return _text_response("Проекты: Маркетинг.")
+
+    projects = [{"gid": "p1", "name": "Маркетинг"}]
+    with patch.object(llm_service, "_ollama_raw_chat", side_effect=fake_raw_chat), \
+         patch("router.asana_service.list_projects", return_value=projects):
+        result = asyncio.run(llm_service.process_message("Покажи проекты", user_id=50))
+
+    assert call_count == 2
+    assert "Маркетинг" in result
+
+
+def test_process_message_text_tool_call_with_preamble():
+    """Preamble garbage before <tool_call> tag is ignored."""
+    import llm_service
+    llm_service.clear_history(51)
+    call_count = 0
+
+    async def fake_raw_chat(messages, tools):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            # model outputs garbage + tool call (exactly as seen in production)
+            body = json.dumps({"name": "list_projects", "arguments": {}})
+            return {"message": {
+                "role": "assistant",
+                "content": f":'\nolith\n<tool_call>\n{body}\n</tool_call>",
+            }}
+        return _text_response("Вот проекты.")
+
+    projects = [{"gid": "p1", "name": "Маркетинг"}]
+    with patch.object(llm_service, "_ollama_raw_chat", side_effect=fake_raw_chat), \
+         patch("router.asana_service.list_projects", return_value=projects):
+        result = asyncio.run(llm_service.process_message("Покажи проекты", user_id=51))
+
+    assert call_count == 2
 
 
 # ── history ───────────────────────────────────────────────────────────────────
