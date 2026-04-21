@@ -517,3 +517,32 @@ def test_clear_history_resets_context():
 
     # Only system + current user message — no history
     assert len([m for m in captured if m["role"] == "user"]) == 1
+
+
+# ── warmup_model ─────────────────────────────────────────────────────────────
+
+def test_warmup_model_calls_ollama():
+    """warmup_model should send a minimal request to load the model into memory."""
+    import llm_service
+    called_with = []
+
+    async def fake_chat(messages, tools):
+        called_with.extend(messages)
+        return {"message": {"role": "assistant", "content": "ok"}}
+
+    with patch.object(llm_service, "_ollama_raw_chat", side_effect=fake_chat):
+        asyncio.run(llm_service.warmup_model())
+
+    assert len(called_with) > 0
+
+
+def test_warmup_model_does_not_raise_on_error():
+    """warmup_model should swallow exceptions so bot startup is not blocked."""
+    import llm_service
+    import httpx
+
+    async def fail(*_):
+        raise httpx.TimeoutException("timeout")
+
+    with patch.object(llm_service, "_ollama_raw_chat", side_effect=fail):
+        asyncio.run(llm_service.warmup_model())  # must not raise

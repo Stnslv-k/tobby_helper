@@ -405,6 +405,18 @@ def _parse_text_tool_calls(content: str) -> list:
     return calls
 
 
+async def warmup_model() -> None:
+    """Send a minimal request to load the model into memory before users arrive."""
+    try:
+        await _ollama_raw_chat(
+            [{"role": "user", "content": "ping"}],
+            [],
+        )
+        logger.info("Ollama model warmed up successfully")
+    except Exception as e:
+        logger.warning("Ollama warmup failed (non-fatal): %s", e)
+
+
 async def process_message(text: str, user_id: int = 0) -> str:
     """Process user message using Ollama tool calling loop with per-user history."""
     import router  # late import — avoids circular dependency

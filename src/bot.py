@@ -211,6 +211,7 @@ def main() -> None:
 
     async def post_init(application: Application) -> None:
         scheduler.start_scheduler(_send_notification)
+        await llm_service.warmup_model()
 
     app.post_init = post_init
     logger.info("Bot started")
