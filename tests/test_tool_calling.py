@@ -101,6 +101,34 @@ def test_dispatch_get_tasks_rejects_placeholder_project_gid():
     assert "search_project" in result
 
 
+def test_dispatch_create_task_full_resolves_names_and_creates():
+    """High-level create: resolves assignee and project names to GIDs internally."""
+    from router import dispatch_tool
+    with patch("router.asana_service.search_user", return_value="u_gid") as su, \
+         patch("router.asana_service.search_project", return_value="p_gid") as sp, \
+         patch("router.asana_service.create_task", return_value="new_task_gid") as ct:
+        result = asyncio.run(dispatch_tool("create_task_full", {
+            "title": "больше золота",
+            "due_date": "2026-04-25",
+            "assignee_name": "кос",
+            "project_name": "Kos project",
+            "description": "тестовая задача",
+        }))
+    su.assert_called_once_with("кос")
+    sp.assert_called_once_with("Kos project")
+    ct.assert_called_once_with("больше золота", "тестовая задача", "2026-04-25", "u_gid", "p_gid")
+    assert "new_task_gid" in result
+
+
+def test_dispatch_create_task_full_without_optional_fields():
+    """create_task_full works with only title (no assignee, no project, no due_date)."""
+    from router import dispatch_tool
+    with patch("router.asana_service.create_task", return_value="t1") as ct:
+        result = asyncio.run(dispatch_tool("create_task_full", {"title": "Простая задача"}))
+    ct.assert_called_once_with("Простая задача", None, None, None, None)
+    assert "t1" in result
+
+
 def test_dispatch_assign_task_resolves_names_and_updates():
     """assign_task finds task and user by name, then calls update_task."""
     from router import dispatch_tool

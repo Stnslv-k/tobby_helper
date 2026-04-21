@@ -172,8 +172,29 @@ _ASANA_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "create_task_full",
+            "description": (
+                "Создать новую задачу в Asana по имени исполнителя и названию проекта. "
+                "Используй ВМЕСТО create_task когда пользователь называет исполнителя или проект по имени."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Название задачи"},
+                    "description": {"type": "string", "description": "Описание задачи"},
+                    "due_date": {"type": "string", "description": "Срок выполнения YYYY-MM-DD"},
+                    "assignee_name": {"type": "string", "description": "Имя исполнителя точно как написал пользователь"},
+                    "project_name": {"type": "string", "description": "Название проекта точно как написал пользователь"},
+                },
+                "required": ["title"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "create_task",
-            "description": "Создать новую задачу в Asana.",
+            "description": "Создать новую задачу в Asana. Используй ТОЛЬКО если уже знаешь числовые GID исполнителя и проекта.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -327,7 +348,8 @@ _TOOL_SYSTEM = (
     "7. Для показа задач из проекта используй get_tasks_for_project(project_name=...). Для задач пользователя — get_tasks_for_user(user_name=...). Не используй get_tasks напрямую если не знаешь GID.\n"
     "8. Если пользователь говорит 'этот проект', 'эта задача' и т.п. — используй название/GID из контекста диалога, вызови search_project/search_user сам. Никогда не проси пользователя ещё раз назвать то, что уже упоминалось в диалоге.\n"
     "9. Вызывай get_tasks ОДИН раз за запрос — только с project_gid ИЛИ только с assignee_gid (не оба варианта отдельно). Не повторяй один и тот же инструмент с разными параметрами.\n"
-    "10. Для назначения исполнителя задаче используй assign_task(task_name, assignee_name). Никогда не выдумывай task_gid или user_gid."
+    "10. Для назначения исполнителя задаче используй assign_task(task_name, assignee_name). Никогда не выдумывай task_gid или user_gid.\n"
+    "11. Для создания задачи с исполнителем или проектом ВСЕГДА используй create_task_full(title, assignee_name, project_name, ...). Никогда не передавай имена в assignee_gid или project_gid — туда идут только числовые GID."
 )
 
 

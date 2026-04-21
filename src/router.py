@@ -229,6 +229,26 @@ async def dispatch_tool(name: str, arguments: dict) -> str:
         tasks = await loop.run_in_executor(None, asana_service.get_tasks, None, user_gid)
         return json.dumps(tasks, ensure_ascii=False)
 
+    elif name == "create_task_full":
+        title = arguments.get("title", "")
+        description = arguments.get("description")
+        due_date = arguments.get("due_date")
+        assignee_name = arguments.get("assignee_name")
+        project_name = arguments.get("project_name")
+        assignee_gid = (
+            await loop.run_in_executor(None, asana_service.search_user, assignee_name)
+            if assignee_name else None
+        )
+        project_gid = (
+            await loop.run_in_executor(None, asana_service.search_project, project_name)
+            if project_name else None
+        )
+        task_gid = await loop.run_in_executor(
+            None, asana_service.create_task,
+            title, description, due_date, assignee_gid, project_gid,
+        )
+        return f"created: {task_gid}"
+
     elif name == "list_projects":
         projects = await loop.run_in_executor(None, asana_service.list_projects)
         return json.dumps(projects, ensure_ascii=False)
