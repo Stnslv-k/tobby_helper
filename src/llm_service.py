@@ -345,7 +345,7 @@ async def _ollama_raw_chat(messages: list, tools: list) -> dict:
         "messages": messages,
         "tools": tools,
         "stream": False,
-        "keep_alive": "30m",  # prevent model unload between requests
+        "keep_alive": -1,  # keep model loaded permanently (never unload)
     }
     async with httpx.AsyncClient(timeout=180.0) as client:
         resp = await client.post(
