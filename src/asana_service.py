@@ -157,6 +157,11 @@ def search_tasks(text: str, limit: int = 20) -> list[dict]:
     return resp.json()["data"]
 
 
+def delete_task(task_gid: str) -> None:
+    resp = _get_client().delete(f"{_BASE}/tasks/{task_gid}")
+    resp.raise_for_status()
+
+
 def add_task_to_project(task_gid: str, project_gid: str) -> None:
     resp = _get_client().post(
         f"{_BASE}/tasks/{task_gid}/addProject",

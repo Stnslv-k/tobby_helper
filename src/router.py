@@ -283,5 +283,12 @@ async def dispatch_tool(name: str, arguments: dict) -> str:
         )
         return "updated"
 
+    elif name == "delete_task":
+        task_gid = arguments.get("task_gid", "")
+        if not str(task_gid).isdigit():
+            return f"error: task_gid must be a numeric Asana GID, got '{task_gid}'"
+        await loop.run_in_executor(None, asana_service.delete_task, task_gid)
+        return "deleted"
+
     else:
         return f"unknown tool: {name}"

@@ -320,6 +320,20 @@ _ASANA_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "delete_task",
+            "description": "Удалить задачу из Asana по её GID. Используй когда пользователь просит удалить задачу.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_gid": {"type": "string", "description": "GID задачи из Asana (числовой)"},
+                },
+                "required": ["task_gid"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "assign_task",
             "description": "Назначить исполнителя задаче по имени задачи и имени пользователя. Используй когда нужно указать или сменить исполнителя задачи.",
             "parameters": {
@@ -349,7 +363,8 @@ _TOOL_SYSTEM = (
     "8. Если пользователь говорит 'этот проект', 'эта задача' и т.п. — используй название/GID из контекста диалога, вызови search_project/search_user сам. Никогда не проси пользователя ещё раз назвать то, что уже упоминалось в диалоге.\n"
     "9. Вызывай get_tasks ОДИН раз за запрос — только с project_gid ИЛИ только с assignee_gid (не оба варианта отдельно). Не повторяй один и тот же инструмент с разными параметрами.\n"
     "10. Для назначения исполнителя задаче используй assign_task(task_name, assignee_name). Никогда не выдумывай task_gid или user_gid.\n"
-    "11. Для создания задачи с исполнителем или проектом ВСЕГДА используй create_task_full(title, assignee_name, project_name, ...). Никогда не передавай имена в assignee_gid или project_gid — туда идут только числовые GID."
+    "11. Для создания задачи с исполнителем или проектом ВСЕГДА используй create_task_full(title, assignee_name, project_name, ...). Никогда не передавай имена в assignee_gid или project_gid — туда идут только числовые GID.\n"
+    "12. Для удаления задачи используй delete_task(task_gid). Сначала найди GID через search_tasks, затем удали. Никогда не выдумывай task_gid."
 )
 
 
