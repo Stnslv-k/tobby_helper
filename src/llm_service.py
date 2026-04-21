@@ -379,6 +379,26 @@ async def _ollama_raw_chat(messages: list, tools: list) -> dict:
         return resp.json()
 
 
+async def _openai_raw_chat(messages: list, tools: list) -> dict:
+    """POST to OpenAI /chat/completions with tools, return Ollama-compatible dict."""
+    payload: dict = {
+        "model": OPENAI_MODEL,
+        "messages": messages,
+    }
+    if tools:
+        payload["tools"] = tools
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+            json=payload,
+        )
+        resp.raise_for_status()
+        choice = resp.json()["choices"][0]
+        # Normalise to Ollama shape: {"message": {...}}
+        return {"message": choice["message"]}
+
+
 HISTORY_MAX_MESSAGES = 20  # max user+assistant turns kept per user
 
 _history: dict[int, list] = {}
@@ -406,7 +426,10 @@ def _parse_text_tool_calls(content: str) -> list:
 
 
 async def warmup_model() -> None:
-    """Send a minimal request to load the model into memory before users arrive."""
+    """Send a minimal request to load the Ollama model into memory before users arrive.
+    No-op when using OpenAI (no cold start there)."""
+    if LLM_PROVIDER != "ollama":
+        return
     try:
         await _ollama_raw_chat(
             [{"role": "user", "content": "ping"}],
@@ -431,9 +454,11 @@ async def process_message(text: str, user_id: int = 0) -> str:
 
     final_reply: str = "Не удалось получить ответ."
 
+    _raw_chat = _openai_raw_chat if LLM_PROVIDER == "openai" else _ollama_raw_chat
+
     for _ in range(10):  # cap iterations to prevent runaway loops
         try:
-            response = await _ollama_raw_chat(messages, _ASANA_TOOLS)
+            response = await _raw_chat(messages, _ASANA_TOOLS)
         except httpx.TimeoutException:
             logger.error("Ollama request timed out for user %s", user_id)
             return "Модель думала слишком долго. Попробуй сформулировать запрос короче."

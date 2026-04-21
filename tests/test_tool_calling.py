@@ -546,3 +546,36 @@ def test_warmup_model_does_not_raise_on_error():
 
     with patch.object(llm_service, "_ollama_raw_chat", side_effect=fail):
         asyncio.run(llm_service.warmup_model())  # must not raise
+
+
+# ── OpenAI tool-calling ───────────────────────────────────────────────────────
+
+def test_process_message_uses_openai_when_provider_is_openai():
+    """When LLM_PROVIDER=openai, process_message should use _openai_raw_chat."""
+    import llm_service
+    import config
+
+    with patch.object(llm_service, "LLM_PROVIDER", "openai"), \
+         patch.object(llm_service, "_openai_raw_chat",
+                      new=AsyncMock(return_value=_text_response("Готово"))) as mock_openai, \
+         patch.object(llm_service, "_ollama_raw_chat",
+                      new=AsyncMock(side_effect=AssertionError("should not call ollama"))):
+        result = asyncio.run(llm_service.process_message("Привет", user_id=99))
+
+    assert result == "Готово"
+    mock_openai.assert_called_once()
+
+
+def test_process_message_uses_ollama_when_provider_is_ollama():
+    """When LLM_PROVIDER=ollama (default), process_message should use _ollama_raw_chat."""
+    import llm_service
+
+    with patch.object(llm_service, "LLM_PROVIDER", "ollama"), \
+         patch.object(llm_service, "_ollama_raw_chat",
+                      new=AsyncMock(return_value=_text_response("Ок"))) as mock_ollama, \
+         patch.object(llm_service, "_openai_raw_chat",
+                      new=AsyncMock(side_effect=AssertionError("should not call openai"))):
+        result = asyncio.run(llm_service.process_message("Привет", user_id=98))
+
+    assert result == "Ок"
+    mock_ollama.assert_called_once()
