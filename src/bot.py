@@ -14,6 +14,7 @@ from telegram.ext import (
 
 import asana_service
 from config import ADMIN_TELEGRAM_IDS, TELEGRAM_BOT_TOKEN
+import llm_service
 from llm_service import process_message
 from router import check_rate_limit
 import scheduler
