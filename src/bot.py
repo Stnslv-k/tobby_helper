@@ -184,7 +184,7 @@ async def _process_input(update: Update, text: str) -> None:
         response = await process_message(text, user_id=update.effective_user.id)
         await update.message.reply_text(response)
     except Exception as e:
-        logger.error("Error processing input: %s", e)
+        logger.error("Error processing input: %s — %r", e, e, exc_info=True)
         await update.message.reply_text("Произошла ошибка. Попробуй ещё раз.")
 
 

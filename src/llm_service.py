@@ -385,6 +385,7 @@ def _parse_text_tool_calls(content: str) -> list:
 async def process_message(text: str, user_id: int = 0) -> str:
     """Process user message using Ollama tool calling loop with per-user history."""
     import router  # late import — avoids circular dependency
+    import httpx
 
     prior = _history.get(user_id, [])
     messages: list = [
@@ -396,7 +397,14 @@ async def process_message(text: str, user_id: int = 0) -> str:
     final_reply: str = "Не удалось получить ответ."
 
     for _ in range(10):  # cap iterations to prevent runaway loops
-        response = await _ollama_raw_chat(messages, _ASANA_TOOLS)
+        try:
+            response = await _ollama_raw_chat(messages, _ASANA_TOOLS)
+        except httpx.TimeoutException:
+            logger.error("Ollama request timed out for user %s", user_id)
+            return "Модель думала слишком долго. Попробуй сформулировать запрос короче."
+        except httpx.HTTPError as e:
+            logger.error("Ollama HTTP error: %s", e)
+            return "Не удалось связаться с моделью. Попробуй ещё раз."
         msg = response["message"]
         tool_calls = msg.get("tool_calls") or []
 
