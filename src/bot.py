@@ -182,7 +182,11 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def _process_input(update: Update, text: str) -> None:
     await update.message.reply_text("Обрабатываю запрос...")
     try:
-        response = await process_message(text, user_id=update.effective_user.id)
+        response = await process_message(
+            text,
+            user_id=update.effective_user.id,
+            is_admin=_is_admin(update.effective_user.id),
+        )
         await update.message.reply_text(response)
     except Exception as e:
         logger.error("Error processing input: %s — %r", e, e, exc_info=True)

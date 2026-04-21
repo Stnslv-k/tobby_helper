@@ -157,10 +157,19 @@ async def route_action(intent: dict, user_id: int) -> str:
         )
 
 
-async def dispatch_tool(name: str, arguments: dict) -> str:
+_ADMIN_ONLY_TOOLS = {
+    "create_task", "create_task_full", "delete_task",
+    "update_task", "assign_task", "add_task_to_project",
+}
+
+
+async def dispatch_tool(name: str, arguments: dict, is_admin: bool = False) -> str:
     """Execute an Asana tool by name and return a string result for the LLM."""
     loop = asyncio.get_event_loop()
     logger.info("dispatch_tool: %s %s", name, arguments)
+
+    if name in _ADMIN_ONLY_TOOLS and not is_admin:
+        return "error: permission denied — this action requires admin rights"
 
     if name == "search_user":
         result = await loop.run_in_executor(None, asana_service.search_user, arguments["name"])
@@ -276,7 +285,7 @@ async def dispatch_tool(name: str, arguments: dict) -> str:
         fields = dict(arguments.get("fields", {}))
         if "assignee" in fields and not str(fields["assignee"]).isdigit():
             del fields["assignee"]
-        supported = {k for k in fields if k in ("due_date", "assignee")}
+        supported = {k for k in fields if k in ("due_date", "assignee", "notes", "priority")}
         unsupported = set(fields.keys()) - supported
         if supported:
             await loop.run_in_executor(

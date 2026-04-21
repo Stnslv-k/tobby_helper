@@ -5,7 +5,7 @@ from typing import Optional
 
 import httpx
 
-from config import ASANA_PAT, ASANA_WORKSPACE_GID
+from config import ASANA_PAT, ASANA_PRIORITY_FIELD_GID, ASANA_WORKSPACE_GID
 
 logger = logging.getLogger(__name__)
 
@@ -108,12 +108,22 @@ def get_tasks(
     return list(seen.values())
 
 
+_PRIORITY_OPTIONS = {"low": "low", "medium": "medium", "high": "high",
+                     "низкий": "low", "средний": "medium", "высокий": "high"}
+
+
 def update_task(task_gid: str, fields: dict) -> None:
     payload: dict = {}
     if "due_date" in fields:
         payload["due_on"] = fields["due_date"]
     if "assignee" in fields:
         payload["assignee"] = fields["assignee"]
+    if "notes" in fields:
+        payload["notes"] = str(fields["notes"])[:2000]
+    if "priority" in fields and ASANA_PRIORITY_FIELD_GID:
+        option = _PRIORITY_OPTIONS.get(str(fields["priority"]).lower())
+        if option:
+            payload.setdefault("custom_fields", {})[ASANA_PRIORITY_FIELD_GID] = option
     if not payload:
         logger.warning("update_task called with no recognised fields: %s", list(fields.keys()))
         return

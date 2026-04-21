@@ -26,5 +26,7 @@ _days_raw: str = os.getenv("DEADLINE_NOTIFY_DAYS", "1,2")
 DEADLINE_NOTIFY_DAYS: list[int] = [int(d.strip()) for d in _days_raw.split(",")]
 NOTIFY_TIME: str = os.getenv("NOTIFY_TIME", "09:00")
 
+ASANA_PRIORITY_FIELD_GID: str = os.getenv("ASANA_PRIORITY_FIELD_GID", "")
+
 TEAM_FILE: str = os.getenv("TEAM_FILE", "data/team.json")
 RATE_LIMIT_SECONDS: int = int(os.getenv("RATE_LIMIT_SECONDS", "3"))

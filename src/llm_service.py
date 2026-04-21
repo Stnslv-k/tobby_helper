@@ -299,7 +299,7 @@ _ASANA_TOOLS = [
         "type": "function",
         "function": {
             "name": "update_task",
-            "description": "Обновить поля задачи в Asana (срок, исполнитель).",
+            "description": "Обновить поля задачи в Asana (срок, исполнитель, описание, приоритет).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -310,6 +310,8 @@ _ASANA_TOOLS = [
                         "properties": {
                             "due_date": {"type": "string", "description": "Новый срок YYYY-MM-DD"},
                             "assignee": {"type": "string", "description": "GID нового исполнителя"},
+                            "notes": {"type": "string", "description": "Новое описание задачи"},
+                            "priority": {"type": "string", "description": "Приоритет: низкий / средний / высокий"},
                         },
                     },
                 },
@@ -415,6 +417,11 @@ async def _openai_raw_chat(messages: list, tools: list) -> dict:
         return {"message": choice["message"]}
 
 
+_ADMIN_ONLY_TOOL_NAMES = {
+    "create_task", "create_task_full", "delete_task",
+    "update_task", "assign_task", "add_task_to_project",
+}
+
 HISTORY_MAX_MESSAGES = 20  # max user+assistant turns kept per user
 
 _history: dict[int, list] = {}
@@ -456,10 +463,14 @@ async def warmup_model() -> None:
         logger.warning("Ollama warmup failed (non-fatal): %s", e)
 
 
-async def process_message(text: str, user_id: int = 0) -> str:
-    """Process user message using Ollama tool calling loop with per-user history."""
+async def process_message(text: str, user_id: int = 0, is_admin: bool = False) -> str:
+    """Process user message using tool calling loop with per-user history."""
     import router  # late import — avoids circular dependency
     import httpx
+
+    tools = _ASANA_TOOLS if is_admin else [
+        t for t in _ASANA_TOOLS if t["function"]["name"] not in _ADMIN_ONLY_TOOL_NAMES
+    ]
 
     prior = _history.get(user_id, [])
     messages: list = [
@@ -474,7 +485,7 @@ async def process_message(text: str, user_id: int = 0) -> str:
 
     for _ in range(10):  # cap iterations to prevent runaway loops
         try:
-            response = await _raw_chat(messages, _ASANA_TOOLS)
+            response = await _raw_chat(messages, tools)
         except httpx.TimeoutException:
             logger.error("Ollama request timed out for user %s", user_id)
             return "Модель думала слишком долго. Попробуй сформулировать запрос короче."
@@ -507,7 +518,7 @@ async def process_message(text: str, user_id: int = 0) -> str:
             # Ollama returns arguments as a dict; OpenAI returns a JSON string
             args = fn["arguments"] if isinstance(fn["arguments"], dict) else json.loads(fn["arguments"])
             try:
-                result = await router.dispatch_tool(name, args)
+                result = await router.dispatch_tool(name, args, is_admin=is_admin)
             except Exception as e:
                 logger.error("Tool %s raised: %s", name, e)
                 result = f"error: {e}"
