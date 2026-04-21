@@ -276,12 +276,22 @@ async def dispatch_tool(name: str, arguments: dict) -> str:
         fields = dict(arguments.get("fields", {}))
         if "assignee" in fields and not str(fields["assignee"]).isdigit():
             del fields["assignee"]
-        await loop.run_in_executor(
-            None, asana_service.update_task,
-            task_gid,
-            fields,
-        )
-        return "updated"
+        supported = {k for k in fields if k in ("due_date", "assignee")}
+        unsupported = set(fields.keys()) - supported
+        if supported:
+            await loop.run_in_executor(
+                None, asana_service.update_task,
+                task_gid,
+                {k: fields[k] for k in supported},
+            )
+        parts = []
+        if supported:
+            parts.append(f"updated: {', '.join(supported)}")
+        if unsupported:
+            parts.append(f"not_supported (ignored): {', '.join(unsupported)}")
+        if not supported:
+            parts.append("no supported fields to update")
+        return "; ".join(parts)
 
     elif name == "delete_task":
         task_gid = arguments.get("task_gid", "")

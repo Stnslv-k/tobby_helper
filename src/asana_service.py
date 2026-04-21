@@ -12,17 +12,35 @@ logger = logging.getLogger(__name__)
 _BASE = "https://app.asana.com/api/1.0"
 _TASK_FIELDS = "name,due_on,assignee,assignee.name,assignee.gid,completed,notes"
 
+_CYR_TO_LAT = str.maketrans(
+    "абвгдеёжзийклмнопрстуфхцчшщъыьэюя",
+    "abvgdeyezhziyklmnoprstufhtschshch yuya"[:33],
+)
+# precise one-to-one mapping (33 chars each side)
+_CYR_TO_LAT = str.maketrans(
+    "абвгдеёжзийклмнопрстуфхцчшщъыьэюя",
+    "abvgdeezziyklmnoprstufhccssuueeia",
+)
+
+
+def _transliterate(s: str) -> str:
+    return s.lower().translate(_CYR_TO_LAT)
+
+
 def _fuzzy_match(query: str, name: str, cutoff: float = 0.6) -> bool:
-    """True if query loosely matches name (handles transcription errors like 'COS' → 'Kos')."""
+    """True if query loosely matches name (handles transcription errors and Cyrillic/Latin mix)."""
     q, n = query.lower(), name.lower()
-    if q in n:
-        return True
-    if SequenceMatcher(None, q, n).ratio() >= cutoff:
-        return True
-    for qt in q.split():
-        for nt in n.split():
-            if SequenceMatcher(None, qt, nt).ratio() >= cutoff:
-                return True
+    qt = _transliterate(query)
+    nt = _transliterate(name)
+    for a, b in ((q, n), (qt, nt), (qt, n), (q, nt)):
+        if a in b:
+            return True
+        if SequenceMatcher(None, a, b).ratio() >= cutoff:
+            return True
+        for wa in a.split():
+            for wb in b.split():
+                if SequenceMatcher(None, wa, wb).ratio() >= cutoff:
+                    return True
     return False
 
 
