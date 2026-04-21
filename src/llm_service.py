@@ -496,7 +496,11 @@ async def process_message(text: str, user_id: int = 0) -> str:
                 logger.error("Tool %s raised: %s", name, e)
                 result = f"error: {e}"
 
-            messages.append({"role": "tool", "content": str(result)})
+            tool_msg: dict = {"role": "tool", "content": str(result)}
+            # OpenAI requires tool_call_id to match the assistant's tool call
+            if call.get("id"):
+                tool_msg["tool_call_id"] = call["id"]
+            messages.append(tool_msg)
     else:
         final_reply = "Достигнуто максимальное число шагов."
 
