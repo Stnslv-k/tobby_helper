@@ -61,6 +61,30 @@ def test_notifies_only_admins_when_no_telegram_id():
     assert len(sent) == 2  # только два админа, без исполнителя
 
 
+def test_start_scheduler_twice_does_not_duplicate_jobs(monkeypatch):
+    """Calling start_scheduler twice must not create two running schedulers."""
+    import scheduler
+    monkeypatch.setattr("config.NOTIFY_TIME", "09:00")
+
+    async def fake_send(chat_id, text): pass
+
+    async def _run():
+        monkeypatch.setattr(scheduler, "_scheduler", None)
+        scheduler.start_scheduler(fake_send)
+        first = scheduler._scheduler
+        jobs_after_first = len(first.get_jobs())
+
+        scheduler.start_scheduler(fake_send)
+        second = scheduler._scheduler
+
+        assert first is second, "start_scheduler created a second scheduler"
+        assert len(second.get_jobs()) == jobs_after_first, "duplicate job added"
+
+        scheduler.stop_scheduler()
+
+    asyncio.run(_run())
+
+
 def test_no_notifications_when_no_tasks():
     import scheduler
     sent = []

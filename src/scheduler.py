@@ -47,6 +47,10 @@ def start_scheduler(
     send_message: Callable[[int, str], Awaitable[None]],
 ) -> None:
     global _scheduler
+    if _scheduler is not None and _scheduler.running:
+        logger.warning("Scheduler already running — skipping duplicate start")
+        return
+
     hour, minute = NOTIFY_TIME.split(":")
 
     async def _job() -> None:
