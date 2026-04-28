@@ -244,6 +244,8 @@ async def dispatch_tool(name: str, arguments: dict, is_admin: bool = False) -> s
         due_date = arguments.get("due_date")
         assignee_name = arguments.get("assignee_name")
         project_name = arguments.get("project_name")
+        if not project_name:
+            return "error: project_name is required — ask the user which project to use before creating the task"
         assignee_gid = (
             await loop.run_in_executor(None, asana_service.search_user, assignee_name)
             if assignee_name else None
