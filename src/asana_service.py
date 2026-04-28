@@ -27,21 +27,23 @@ def _transliterate(s: str) -> str:
     return s.lower().translate(_CYR_TO_LAT)
 
 
-def _fuzzy_match(query: str, name: str, cutoff: float = 0.6) -> bool:
-    """True if query loosely matches name (handles transcription errors and Cyrillic/Latin mix)."""
+def _fuzzy_score(query: str, name: str) -> float:
+    """Return best similarity score between query and name, handling Cyrillic/Latin mix."""
     q, n = query.lower(), name.lower()
-    qt = _transliterate(query)
-    nt = _transliterate(name)
+    qt, nt = _transliterate(query), _transliterate(name)
+    best = 0.0
     for a, b in ((q, n), (qt, nt), (qt, n), (q, nt)):
-        if a in b:
-            return True
-        if SequenceMatcher(None, a, b).ratio() >= cutoff:
-            return True
-        for wa in a.split():
-            for wb in b.split():
-                if SequenceMatcher(None, wa, wb).ratio() >= cutoff:
-                    return True
-    return False
+        if a == b:
+            return 1.0
+        if a and b and a in b:
+            # query is a substring of name — strong signal, but not perfect
+            best = max(best, 0.85)
+        best = max(best, SequenceMatcher(None, a, b).ratio())
+    return best
+
+
+def _fuzzy_match(query: str, name: str, cutoff: float = 0.6) -> bool:
+    return _fuzzy_score(query, name) >= cutoff
 
 
 def _get_client() -> httpx.Client:
@@ -141,16 +143,17 @@ def list_users() -> list[dict]:
 
 
 def search_user(name: str) -> Optional[str]:
-    # Note: returns only the first page (~20 results). Sufficient for small workspaces.
     resp = _get_client().get(
         f"{_BASE}/workspaces/{ASANA_WORKSPACE_GID}/users",
         params={"opt_fields": "name,gid"},
     )
     resp.raise_for_status()
+    best_gid, best_score = None, 0.0
     for user in resp.json()["data"]:
-        if _fuzzy_match(name, user["name"]):
-            return user["gid"]
-    return None
+        score = _fuzzy_score(name, user["name"])
+        if score > best_score:
+            best_score, best_gid = score, user["gid"]
+    return best_gid if best_score >= 0.6 else None
 
 
 def list_projects() -> list[dict]:
@@ -163,16 +166,17 @@ def list_projects() -> list[dict]:
 
 
 def search_project(name: str) -> Optional[str]:
-    # Note: returns only the first page (~20 results). Sufficient for small workspaces.
     resp = _get_client().get(
         f"{_BASE}/projects",
         params={"workspace": ASANA_WORKSPACE_GID, "opt_fields": "name,gid"},
     )
     resp.raise_for_status()
+    best_gid, best_score = None, 0.0
     for project in resp.json()["data"]:
-        if _fuzzy_match(name, project["name"]):
-            return project["gid"]
-    return None
+        score = _fuzzy_score(name, project["name"])
+        if score > best_score:
+            best_score, best_gid = score, project["gid"]
+    return best_gid if best_score >= 0.6 else None
 
 
 def search_tasks(text: str, limit: int = 20) -> list[dict]:
