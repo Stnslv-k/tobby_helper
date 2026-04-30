@@ -287,7 +287,7 @@ async def dispatch_tool(name: str, arguments: dict, is_admin: bool = False) -> s
         fields = dict(arguments.get("fields", {}))
         if "assignee" in fields and not str(fields["assignee"]).isdigit():
             del fields["assignee"]
-        supported = {k for k in fields if k in ("due_date", "assignee", "notes", "priority")}
+        supported = {k for k in fields if k in ("name", "due_date", "assignee", "notes", "priority")}
         unsupported = set(fields.keys()) - supported
         if supported:
             await loop.run_in_executor(

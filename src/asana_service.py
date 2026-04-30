@@ -116,6 +116,8 @@ _PRIORITY_OPTIONS = {"low": "low", "medium": "medium", "high": "high",
 
 def update_task(task_gid: str, fields: dict) -> None:
     payload: dict = {}
+    if "name" in fields:
+        payload["name"] = str(fields["name"])[:255]
     if "due_date" in fields:
         payload["due_on"] = fields["due_date"]
     if "assignee" in fields:
